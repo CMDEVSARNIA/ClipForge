@@ -4,11 +4,23 @@ Android app that turns long gameplay recordings into vertical (9:16) TikTok / Yo
 Claude picks the moments and writes titles, and every Claude call goes through a small Cloudflare
 Worker so the Anthropic API key never ships inside the APK.
 
-> **Status: Phase 2 of 6: moment finding & ranking.** See [Roadmap](#roadmap).
+> **Status: Phase 3 of 6: vertical edit & export.** See [Roadmap](#roadmap).
 
 ## What works now
 
-### Phase 2: moment finding & ranking
+### Phase 3: vertical edit & export
+
+- **Output:** 1080×1920 H.264 High, AAC 48 kHz (192 kbps), 30 or 60 fps (Settings; never above the source fps), 10/16 Mbps, 1 s keyframes, **faststart**. The muxer only *attempts* to put `moov` first, so every export is checked and `moov` is relocated in pure Kotlin if needed (`Mp4FastStart`).
+- **Crop modes per clip and per segment:** Center crop · Fit with blurred background · Zoom-fit (a box you draw, over blur) · Pan (slide the 9:16 window). **Auto** (the default) uses Fit + blur for segments where the vision pass flagged a full-screen text card ("WASTED", results screens) or a wide establishing shot, and Center crop everywhere else.
+- **Segments:** split at the playhead, choose a mode per segment, merge. Segments tile the clip and follow trims.
+- **Live 9:16 preview** in the editor runs the same GPU effect as the export (`ExoPlayer.setVideoEffects`).
+- **Audio:** 0.08 s fade-in, 0.4 s fade-out (a custom `AudioProcessor`), resampled to 48 kHz.
+- **Trailing black frames** are trimmed at export (up to 3 s, never below 3 s of clip).
+- **Batch export:** "Select to export" on the moments list (S/A tiers preselected). Clips export in rank order as `01_title_slug.mp4`, … to **Movies/ClipForge** through MediaStore, in a WorkManager foreground job with progress, Cancel, and a done notification.
+
+How the layouts render: `export/LayoutEffect.kt` is a custom Media3 `GlEffect`. The cover region is downsampled to 1/8 size and blurred with three iterations of a separable 9-tap Gaussian, darkened, then upsampled. Up to two sharp layers with anti-aliased rounded corners are composited on top (Phase 4 uses the second for the facecam). Encoding is portrait 1080×1920 when the device's H.264 encoder supports that size; otherwise 1920×1080 with a 90° rotation flag, which all major players and platforms honor.
+
+### Phase 2: moment finding & ranking: moment finding & ranking
 
 - **Find moments** on any project. Before it runs you see the estimated API cost (frames, requests, models). Afterwards you see what it actually spent.
 - On-device signals: audio loudness (MediaCodec decoded to PCM, RMS per 0.5 s), a frame every 2 s (512 px JPEG), scene cuts (luma + color-histogram difference with an adaptive threshold), black frames.
@@ -83,7 +95,9 @@ app/src/main/java/com/clipforge/
   net/WorkerClient.kt      The only network client (talks to the Worker)
   settings/                DataStore settings (Worker URL, app token, models)
   ui/components/           Timelines (scrub, trim) + pure math, tier badges
-  ui/clip/                 Trim editor
+  export/                  Crop math, segments, GPU layout effect, audio fades, faststart,
+                           Transformer exporter, batch ExportWorker
+  ui/clip/                 Trim + framing editor
   ui/settings/             Settings screen
 backend/                   Cloudflare Worker (TypeScript): auth, proxy, budget, trends
 ```
@@ -95,7 +109,7 @@ downscaled immediately (≤192 px, LRU-capped at 4 MB). Long files never load fu
 
 1. ✅ Import & preview
 2. ✅ Moment finding: frame sampling, loudness and scene cuts, Claude via the Worker, trend-aware ranking, cost estimate, trim editor
-3. Vertical edit & export (Media3 Transformer, 1080×1920 H.264/AAC, crop modes, WorkManager)
+3. ✅ Vertical edit & export (Media3 Transformer, 1080×1920 H.264/AAC, crop modes per segment, WorkManager)
 4. Webcam layouts (facecam presets, split / PiP)
 5. Titles & captions (on-device whisper.cpp, word-highlight captions, Claude-polished text)
 6. In-app assistant with tool use + share sheet

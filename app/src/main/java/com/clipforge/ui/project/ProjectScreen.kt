@@ -5,7 +5,16 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.material3.Button
+import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.ContextCompat
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.runtime.mutableStateOf
@@ -76,6 +85,17 @@ fun ProjectScreen(
     val analysis by vm.analysis.collectAsStateWithLifecycle()
     val run by vm.run.collectAsStateWithLifecycle()
     val settings by vm.settings.collectAsStateWithLifecycle()
+    val exportRun by vm.exportRun.collectAsStateWithLifecycle()
+    val selection by vm.selection.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    val permissions = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { vm.exportSelected() }
+    fun export() {
+        val needed = buildList {
+            if (Build.VERSION.SDK_INT <= 28) add(Manifest.permission.WRITE_EXTERNAL_STORAGE)
+            if (Build.VERSION.SDK_INT >= 33) add(Manifest.permission.POST_NOTIFICATIONS)
+        }.filter { ContextCompat.checkSelfPermission(context, it) != PackageManager.PERMISSION_GRANTED }
+        if (needed.isEmpty()) vm.exportSelected() else permissions.launch(needed.toTypedArray())
+    }
     var showSheet by rememberSaveable { mutableStateOf(false) }
 
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) { vm.pause() }
@@ -91,6 +111,18 @@ fun ProjectScreen(
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
             )
+        },
+        bottomBar = {
+            val sel = selection
+            if (sel != null) {
+                Surface(color = MaterialTheme.colorScheme.surfaceContainerHigh) {
+                    Button(
+                        onClick = ::export,
+                        enabled = sel.isNotEmpty() && exportRun?.running != true,
+                        modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(16.dp),
+                    ) { Text("Export ${sel.size} clip${if (sel.size == 1) "" else "s"} (1080×1920)") }
+                }
+            }
         },
         containerColor = MaterialTheme.colorScheme.background,
     ) { padding ->
@@ -126,8 +158,22 @@ fun ProjectScreen(
                                 onOpenSettings = onOpenSettings,
                             )
                         }
+                        exportRun?.takeIf { it.running || it.message != null }?.let { r ->
+                            item(key = "export") { ExportCard(r, vm::cancelExport) }
+                        }
+                        if (clips.isNotEmpty()) {
+                            item(key = "header") {
+                                MomentsHeader(clips.size, selection, vm::startSelection, vm::selectAll, vm::endSelection)
+                            }
+                        }
                         items(clips, key = { it.id }) { c ->
-                            ClipRow(c, p.sourceUri, vm.thumbnailLoader, onClick = { onOpenClip(c.id) }, onPreview = { vm.preview(c) })
+                            ClipRow(
+                                c, p.sourceUri, vm.thumbnailLoader,
+                                onClick = { onOpenClip(c.id) },
+                                onPreview = { vm.preview(c) },
+                                selected = selection?.let { c.id in it },
+                                onToggle = { vm.toggle(c.id) },
+                            )
                         }
                     }
                     if (p != null) item(key = "info") { InfoCard(p) }

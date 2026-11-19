@@ -22,6 +22,7 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -211,18 +212,30 @@ private fun EstimateRow(label: String, value: String, bold: Boolean = false) {
 }
 
 @Composable
-fun ClipRow(clip: ClipEntity, sourceUri: String, thumbnails: ThumbnailLoader, onClick: () -> Unit, onPreview: () -> Unit) {
+fun ClipRow(
+    clip: ClipEntity,
+    sourceUri: String,
+    thumbnails: ThumbnailLoader,
+    onClick: () -> Unit,
+    onPreview: () -> Unit,
+    selected: Boolean? = null,
+    onToggle: () -> Unit = {},
+) {
     val thumb by produceState<ImageBitmap?>(null, clip.id, clip.thumbMs) {
         value = thumbnails.frameAt(sourceUri.toUri(), clip.thumbMs, 320, 320)
     }
     Surface(
-        onClick = onClick,
+        onClick = if (selected != null) onToggle else onClick,
         shape = RoundedCornerShape(14.dp),
-        color = MaterialTheme.colorScheme.surfaceContainer,
+        color = if (selected == true) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f) else MaterialTheme.colorScheme.surfaceContainer,
         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 5.dp),
     ) {
         Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
-            Text("${clip.rank}", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.width(26.dp))
+            if (selected != null) {
+                Checkbox(checked = selected, onCheckedChange = { onToggle() }, modifier = Modifier.size(32.dp))
+            } else {
+                Text("${clip.rank}", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.width(26.dp))
+            }
             Box(Modifier.width(100.dp).aspectRatio(16f / 9f).clip(RoundedCornerShape(8.dp)).background(Color.Black)) {
                 thumb?.let { Image(it, null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize()) }
                 TierBadge(clip.tier, Modifier.align(Alignment.TopStart).padding(4.dp))
@@ -242,12 +255,51 @@ fun ClipRow(clip: ClipEntity, sourceUri: String, thumbnails: ThumbnailLoader, on
                 Spacer(Modifier.height(2.dp))
                 Text(
                     "${TimeFormat.format(clip.startMs)}–${TimeFormat.format(clip.endMs)} · ${clip.lengthMs / 1000}s · ${clip.score}/100" +
-                        if (clip.edited) " · edited" else "",
+                        (if (clip.edited) " · edited" else "") + (if (clip.exportedAt != null) " · exported" else ""),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.primary,
                 )
                 Text(clip.why, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
             }
+        }
+    }
+}
+
+@Composable
+fun ExportCard(run: ProjectViewModel.ExportRun, onCancel: () -> Unit) {
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            if (run.running) {
+                Text("Exporting…", style = MaterialTheme.typography.titleMedium)
+                LinearProgressIndicator(progress = { run.fraction }, modifier = Modifier.fillMaxWidth())
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text(run.step, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))
+                    TextButton(onClick = onCancel) { Text("Cancel") }
+                }
+            } else if (run.message != null) {
+                Text(run.message, style = MaterialTheme.typography.bodySmall)
+            }
+        }
+    }
+}
+
+@Composable
+fun MomentsHeader(count: Int, selection: Set<Long>?, onSelect: () -> Unit, onSelectAll: () -> Unit, onDone: () -> Unit) {
+    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            if (selection == null) "$count moments, best first" else "${selection.size} selected",
+            style = MaterialTheme.typography.labelLarge,
+            modifier = Modifier.weight(1f),
+        )
+        if (selection == null) {
+            TextButton(onClick = onSelect) { Text("Select to export") }
+        } else {
+            TextButton(onClick = onSelectAll) { Text("All") }
+            TextButton(onClick = onDone) { Text("Cancel") }
         }
     }
 }

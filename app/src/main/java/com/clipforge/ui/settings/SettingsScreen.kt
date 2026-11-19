@@ -113,6 +113,15 @@ fun SettingsScreen(onBack: () -> Unit, vm: SettingsViewModel = viewModel(factory
                 Button(onClick = vm::saveModels, enabled = !st.modelsSaved) { Text(if (st.modelsSaved) "Saved" else "Save models") }
             }
 
+            Section("Export") {
+                Text("1080×1920 · H.264 High · AAC 48 kHz · faststart. Saved to Movies/ClipForge.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("Frame rate", modifier = Modifier.weight(1f))
+                    listOf(30, 60).forEach { f -> FilterChip(selected = st.exportFps == f, onClick = { vm.setExportFps(f) }, label = { Text("$f fps") }) }
+                }
+                Text("60 fps keeps gameplay smooth; a 30 fps source stays at 30.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+
             Section("Trends") {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {

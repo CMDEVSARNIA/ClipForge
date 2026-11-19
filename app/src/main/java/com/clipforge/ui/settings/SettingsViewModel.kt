@@ -33,6 +33,7 @@ class SettingsViewModel(private val repo: SettingsRepository, private val worker
         val writingModel: String = AppSettings.DEFAULT_WRITING_MODEL,
         val useTrends: Boolean = true,
         val modelsSaved: Boolean = true,
+        val exportFps: Int = 60,
     )
 
     private val _state = MutableStateFlow(UiState())
@@ -44,7 +45,7 @@ class SettingsViewModel(private val repo: SettingsRepository, private val worker
             _state.update {
                 it.copy(
                     loaded = true, workerUrl = s.workerUrl, connected = s.isConnected,
-                    analysisModel = s.analysisModel, writingModel = s.writingModel, useTrends = s.useTrends,
+                    analysisModel = s.analysisModel, writingModel = s.writingModel, useTrends = s.useTrends, exportFps = s.exportFps,
                 )
             }
             if (s.isConnected) refreshHealth(s.workerUrl)
@@ -59,6 +60,11 @@ class SettingsViewModel(private val repo: SettingsRepository, private val worker
     fun setUseTrends(v: Boolean) {
         _state.update { it.copy(useTrends = v) }
         viewModelScope.launch { repo.setUseTrends(v) }
+    }
+
+    fun setExportFps(fps: Int) {
+        _state.update { it.copy(exportFps = fps) }
+        viewModelScope.launch { repo.setExportFps(fps) }
     }
 
     fun saveModels() {

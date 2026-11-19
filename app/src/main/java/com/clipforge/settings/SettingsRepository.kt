@@ -21,6 +21,8 @@ data class AppSettings(
     val analysisModel: String,
     val writingModel: String,
     val useTrends: Boolean,
+    /** Max output frame rate (30 or 60); never above the source. */
+    val exportFps: Int,
 ) {
     val isConnected: Boolean get() = workerUrl.isNotBlank() && appToken.isNotBlank()
 
@@ -38,6 +40,7 @@ class SettingsRepository(private val context: Context) {
         val analysisModel = stringPreferencesKey("analysis_model")
         val writingModel = stringPreferencesKey("writing_model")
         val useTrends = booleanPreferencesKey("use_trends")
+        val exportFps = androidx.datastore.preferences.core.intPreferencesKey("export_fps")
     }
 
     val settings: Flow<AppSettings> = context.dataStore.data.map { p ->
@@ -47,6 +50,7 @@ class SettingsRepository(private val context: Context) {
             analysisModel = p[Keys.analysisModel] ?: AppSettings.DEFAULT_ANALYSIS_MODEL,
             writingModel = p[Keys.writingModel] ?: AppSettings.DEFAULT_WRITING_MODEL,
             useTrends = p[Keys.useTrends] ?: true,
+            exportFps = p[Keys.exportFps] ?: 60,
         )
     }
 
@@ -73,4 +77,6 @@ class SettingsRepository(private val context: Context) {
     }
 
     suspend fun setUseTrends(enabled: Boolean) = context.dataStore.edit { it[Keys.useTrends] = enabled }
+
+    suspend fun setExportFps(fps: Int) = context.dataStore.edit { it[Keys.exportFps] = if (fps > 30) 60 else 30 }
 }

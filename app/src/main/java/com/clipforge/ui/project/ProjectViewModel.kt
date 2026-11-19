@@ -36,6 +36,7 @@ import kotlinx.coroutines.flow.stateIn
 import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import com.clipforge.analysis.AnalysisWorker
+import com.clipforge.export.ExportWorker
 import com.clipforge.analysis.CostEstimator
 import com.clipforge.data.db.AnalysisDao
 import com.clipforge.data.db.AnalysisEntity
@@ -92,6 +93,50 @@ class ProjectViewModel(
     }
 
     fun cancelAnalysis() = AnalysisWorker.cancel(app, projectId)
+
+    // ---- batch export ----
+
+    data class ExportRun(val running: Boolean, val fraction: Float, val step: String, val message: String?)
+
+    val exportRun: StateFlow<ExportRun?> = WorkManager.getInstance(app)
+        .getWorkInfosForUniqueWorkFlow(ExportWorker.uniqueName(projectId))
+        .map { infos ->
+            val info = infos.lastOrNull() ?: return@map null
+            val running = info.state == WorkInfo.State.RUNNING || info.state == WorkInfo.State.ENQUEUED || info.state == WorkInfo.State.BLOCKED
+            val exported = info.outputData.getInt(ExportWorker.KEY_EXPORTED, 0)
+            val err = info.outputData.getString(ExportWorker.KEY_ERROR)
+            ExportRun(
+                running = running,
+                fraction = info.progress.getFloat(ExportWorker.KEY_FRACTION, 0f),
+                step = info.progress.getString(ExportWorker.KEY_STEP) ?: if (running) "Queued" else "",
+                message = when (info.state) {
+                    WorkInfo.State.SUCCEEDED -> "Saved $exported clip${if (exported == 1) "" else "s"} to Movies/ClipForge." + (err?.let { "\nFailed: $it" } ?: "")
+                    WorkInfo.State.FAILED -> "Export failed: ${err ?: "unknown error"}"
+                    WorkInfo.State.CANCELLED -> "Export cancelled."
+                    else -> null
+                },
+            )
+        }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
+    private val _selection = MutableStateFlow<Set<Long>?>(null)
+    /** null = not in selection mode. */
+    val selection: StateFlow<Set<Long>?> = _selection.asStateFlow()
+
+    fun startSelection() { _selection.value = clips.value.filter { it.tier in setOf("S", "A") }.map { it.id }.toSet() }
+    fun endSelection() { _selection.value = null }
+    fun toggle(id: Long) { _selection.value = _selection.value?.let { if (id in it) it - id else it + id } }
+    fun selectAll() { _selection.value = clips.value.map { it.id }.toSet() }
+
+    fun exportSelected() {
+        val ids = _selection.value ?: return
+        if (ids.isEmpty()) return
+        player.pause()
+        ExportWorker.enqueue(app, projectId, clips.value.filter { it.id in ids }.map { it.id })
+        _selection.value = null
+    }
+
+    fun cancelExport() = ExportWorker.cancel(app, projectId)
 
     fun preview(clip: ClipEntity) {
         player.setSeekParameters(SeekParameters.EXACT)

@@ -1,5 +1,6 @@
 package com.clipforge.data.db
 
+import androidx.room.ColumnInfo
 import androidx.room.Dao
 import androidx.room.Entity
 import androidx.room.ForeignKey
@@ -70,6 +71,15 @@ data class ClipEntity(
     val loudnessAboveMedianDb: Float,
     val thumbMs: Long,
     val edited: Boolean = false,
+    /** AUTO (text cards / wide shots → fit+blur, else center) or a fixed [com.clipforge.export.CropMode]. */
+    @ColumnInfo(defaultValue = "AUTO") val cropMode: String = "AUTO",
+    @ColumnInfo(defaultValue = "0") val panX: Float = 0f,
+    /** Zoom-fit source rect as "l,t,r,b" (normalized). */
+    val zoomRect: String? = null,
+    /** Explicit per-segment layout (JSON list of Segment) when the user split the clip; null = derived. */
+    val segmentsJson: String? = null,
+    val exportedUri: String? = null,
+    val exportedAt: Long? = null,
 ) {
     val lengthMs: Long get() = endMs - startMs
 }
@@ -108,6 +118,12 @@ interface ClipDao {
 
     @Update
     suspend fun update(clip: ClipEntity)
+
+    @Query("SELECT * FROM clips WHERE id IN (:ids) ORDER BY rank ASC")
+    suspend fun getAll(ids: List<Long>): List<ClipEntity>
+
+    @Query("UPDATE clips SET exportedUri = :uri, exportedAt = :at WHERE id = :id")
+    suspend fun markExported(id: Long, uri: String, at: Long)
 
     @Query("DELETE FROM clips WHERE projectId = :projectId")
     suspend fun deleteForProject(projectId: Long)

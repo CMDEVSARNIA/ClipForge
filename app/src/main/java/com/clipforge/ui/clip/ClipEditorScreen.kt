@@ -1,6 +1,14 @@
 package com.clipforge.ui.clip
 
+import android.Manifest
+import android.content.pm.PackageManager
+import android.os.Build
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.OptIn
+import androidx.compose.material3.Button
+import androidx.compose.ui.platform.LocalContext
+import androidx.core.content.ContextCompat
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
@@ -62,6 +70,17 @@ import com.clipforge.util.TimeFormat
 fun ClipEditorScreen(onBack: () -> Unit, vm: ClipEditorViewModel = viewModel(factory = ClipEditorViewModel.Factory)) {
     val st by vm.state.collectAsStateWithLifecycle()
     val strip by vm.strip.collectAsStateWithLifecycle()
+    val sourceFrame by vm.sourceFrame.collectAsStateWithLifecycle()
+    val exportRun by vm.exportRun.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    val storagePermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) vm.export()
+    }
+    fun export() {
+        val needsAsk = Build.VERSION.SDK_INT <= 28 &&
+            ContextCompat.checkSelfPermission(context, Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED
+        if (needsAsk) storagePermission.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE) else vm.export()
+    }
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) { vm.pause() }
 
     Scaffold(
@@ -71,7 +90,7 @@ fun ClipEditorScreen(onBack: () -> Unit, vm: ClipEditorViewModel = viewModel(fac
                 navigationIcon = { IconButton(onClick = onBack) { Icon(painterResource(R.drawable.ic_back), "Back") } },
                 actions = {
                     TextButton(onClick = vm::resetToSuggested, enabled = st.clip != null) { Text("Reset") }
-                    TextButton(onClick = vm::save, enabled = st.dirty) { Text(if (st.dirty) "Save" else "Saved") }
+                    TextButton(onClick = { vm.save() }, enabled = st.dirty) { Text(if (st.dirty) "Save" else "Saved") }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
             )
@@ -82,10 +101,11 @@ fun ClipEditorScreen(onBack: () -> Unit, vm: ClipEditorViewModel = viewModel(fac
         val project = st.project
         if (clip == null || project == null) return@Scaffold
         BoxWithConstraints(Modifier.fillMaxSize().padding(padding)) {
-            val maxPlayer = maxHeight * 0.4f
+            val maxPlayer = maxHeight * 0.45f
             Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
                 Box(Modifier.fillMaxWidth().background(Color.Black), contentAlignment = Alignment.Center) {
-                    ClipPlayer(vm, Modifier.heightIn(max = maxPlayer).aspectRatio(project.toVideoInfo().aspectRatio), st.isPlaying)
+                    val aspect = if (st.preview916) 9f / 16f else project.toVideoInfo().aspectRatio
+                    ClipPlayer(vm, Modifier.heightIn(max = maxPlayer).aspectRatio(aspect), st.isPlaying)
                 }
                 Column(Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
                     TrimTimeline(
@@ -131,6 +151,19 @@ fun ClipEditorScreen(onBack: () -> Unit, vm: ClipEditorViewModel = viewModel(fac
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         modifier = Modifier.padding(top = 6.dp),
                     )
+                }
+
+                FramingSection(st, sourceFrame, project.toVideoInfo().aspectRatio, vm)
+
+                Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text(
+                            exportRun?.let { "Exporting… $it" } ?: clip.exportedAt?.let { "Exported · saved in Movies/ClipForge" } ?: "1080×1920 · H.264 · AAC 48 kHz",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                    Button(onClick = ::export, enabled = exportRun == null) { Text(if (clip.exportedAt != null) "Export again" else "Export") }
                 }
 
                 Surface(

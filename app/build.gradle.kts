@@ -14,8 +14,8 @@ android {
         applicationId = "com.clipforge"
         minSdk = 26
         targetSdk = 36
-        versionCode = 2
-        versionName = "0.2.0-phase2"
+        versionCode = 3
+        versionName = "0.3.0-phase3"
     }
 
     signingConfigs {
@@ -76,6 +76,9 @@ dependencies {
 
     implementation(libs.media3.exoplayer)
     implementation(libs.media3.ui)
+    implementation(libs.media3.transformer)
+    implementation(libs.media3.effect)
+    implementation(libs.media3.muxer)
 
     implementation(libs.room.runtime)
     implementation(libs.room.ktx)
