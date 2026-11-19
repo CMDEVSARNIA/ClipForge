@@ -63,6 +63,7 @@ import com.clipforge.media.ThumbnailLoader
 import com.clipforge.settings.AppSettings
 import com.clipforge.ui.components.TierBadge
 import com.clipforge.util.TimeFormat
+import com.clipforge.util.ShareClips
 import java.util.Locale
 
 fun usd(v: Double): String = when {
@@ -252,7 +253,15 @@ fun ClipRow(
                 }
             }
             Column(Modifier.weight(1f).padding(start = 12.dp)) {
-                Text(clip.title, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                Row(verticalAlignment = Alignment.Top) {
+                    Text(clip.title, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
+                    if (clip.exportedAt != null && selected == null) {
+                        val ctx = LocalContext.current
+                        androidx.compose.material3.IconButton(onClick = { ShareClips.share(ctx, clip, ShareClips.Target.ANY) }, modifier = Modifier.size(28.dp)) {
+                            Icon(painterResource(R.drawable.ic_share), "Share", Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
+                        }
+                    }
+                }
                 Spacer(Modifier.height(2.dp))
                 Text(
                     "${TimeFormat.format(clip.startMs)}–${TimeFormat.format(clip.endMs)} · ${clip.lengthMs / 1000}s · ${clip.score}/100" +

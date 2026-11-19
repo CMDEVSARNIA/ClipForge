@@ -4,6 +4,7 @@ import androidx.compose.runtime.Composable
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
+import com.clipforge.ui.assistant.AssistantScreen
 import com.clipforge.ui.cam.CamSetupScreen
 import com.clipforge.ui.clip.ClipEditorScreen
 import com.clipforge.ui.home.HomeScreen
@@ -26,6 +27,9 @@ object SettingsRoute
 @Serializable
 data class CamSetupRoute(val projectId: Long, val atMs: Long)
 
+@Serializable
+data class AssistantRoute(val projectId: Long)
+
 @Composable
 fun ClipForgeNavHost() {
     val nav = rememberNavController()
@@ -42,7 +46,11 @@ fun ClipForgeNavHost() {
                 onOpenClip = { id -> nav.navigate(ClipEditorRoute(id)) },
                 onOpenSettings = { nav.navigate(SettingsRoute) },
                 onOpenCamSetup = { id, at -> nav.navigate(CamSetupRoute(id, at)) },
+                onOpenAssistant = { id -> nav.navigate(AssistantRoute(id)) },
             )
+        }
+        composable<AssistantRoute> {
+            AssistantScreen(onBack = { nav.popBackStack() }, onOpenSettings = { nav.navigate(SettingsRoute) })
         }
         composable<CamSetupRoute> {
             CamSetupScreen(onBack = { nav.popBackStack() })

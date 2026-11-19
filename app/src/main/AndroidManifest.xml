@@ -11,6 +11,17 @@
         android:name="android.permission.WRITE_EXTERNAL_STORAGE"
         android:maxSdkVersion="28" />
 
+    <!-- Package visibility (Android 11+) for the direct TikTok / YouTube share buttons. -->
+    <queries>
+        <package android:name="com.zhiliaoapp.musically" />
+        <package android:name="com.ss.android.ugc.trill" />
+        <package android:name="com.google.android.youtube" />
+        <intent>
+            <action android:name="android.intent.action.SEND" />
+            <data android:mimeType="video/*" />
+        </intent>
+    </queries>
+
     <application
         android:name=".ClipForgeApp"
         android:allowBackup="false"

@@ -94,6 +94,40 @@ class WorkerClient(private val settings: SettingsRepository) {
         return json.decodeFromString(TrendsResponse.serializer(), body)
     }
 
+    /** Full response JSON (content blocks, stop_reason, usage) plus its cost; used by the assistant's tool loop. */
+    data class RawReply(val body: JsonObject, val costUsd: Double)
+
+    suspend fun messagesRaw(request: JsonObject, maxAttempts: Int = 3): RawReply {
+        val s = settings.current()
+        if (!s.isConnected) throw WorkerException(401, "not_connected", "Connect ClipForge to your Worker in Settings first.")
+        val model = (request["model"] as? JsonPrimitive)?.contentOrNull.orEmpty()
+        var attempt = 0
+        while (true) {
+            attempt++
+            try {
+                val (body, headers) = executeWithHeaders(
+                    Request.Builder()
+                        .url("${s.workerUrl}/v1/messages")
+                        .header("authorization", "Bearer ${s.appToken}")
+                        .post(request.toString().toRequestBody(jsonType))
+                        .build()
+                )
+                val o = json.parseToJsonElement(body).jsonObject
+                val usage = o["usage"] as? JsonObject
+                fun u(k: String) = (usage?.get(k) as? JsonPrimitive)?.longOrNull ?: 0L
+                val cost = headers["x-clipforge-cost-usd"]?.toDoubleOrNull()
+                    ?: ModelPricing.cost(model, u("input_tokens") + u("cache_creation_input_tokens") + u("cache_read_input_tokens"), u("output_tokens"))
+                return RawReply(o, cost)
+            } catch (e: WorkerException) {
+                if (!e.retryable || attempt >= maxAttempts) throw e
+                delay(((e.retryAfterS ?: 0L) * 1000).coerceAtLeast(2_000L * attempt * attempt).coerceAtMost(60_000))
+            } catch (e: IOException) {
+                if (attempt >= maxAttempts) throw e
+                delay(2_000L * attempt * attempt)
+            }
+        }
+    }
+
     /** POST /v1/messages with retries on transient failures (429, 5xx, overloaded, network). */
     suspend fun messages(request: JsonObject, maxAttempts: Int = 3): ClaudeReply {
         val s = settings.current()

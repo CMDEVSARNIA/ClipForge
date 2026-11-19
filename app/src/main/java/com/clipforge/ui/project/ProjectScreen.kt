@@ -33,6 +33,7 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.CircularProgressIndicator
@@ -79,6 +80,7 @@ fun ProjectScreen(
     onOpenClip: (Long) -> Unit,
     onOpenSettings: () -> Unit,
     onOpenCamSetup: (projectId: Long, atMs: Long) -> Unit,
+    onOpenAssistant: (projectId: Long) -> Unit,
     vm: ProjectViewModel = viewModel(factory = ProjectViewModel.Factory),
 ) {
     val project by vm.project.collectAsStateWithLifecycle()
@@ -113,6 +115,20 @@ fun ProjectScreen(
                 },
                 navigationIcon = {
                     IconButton(onClick = onBack) { Icon(painterResource(R.drawable.ic_back), "Back") }
+                },
+                actions = {
+                    if (clips.isNotEmpty()) {
+                        androidx.compose.material3.FilledTonalButton(
+                            onClick = { vm.pause(); project?.let { onOpenAssistant(it.id) } },
+                            shape = androidx.compose.foundation.shape.RoundedCornerShape(50),
+                            contentPadding = PaddingValues(horizontal = 14.dp, vertical = 6.dp),
+                            modifier = Modifier.padding(end = 8.dp),
+                        ) {
+                            Icon(painterResource(R.drawable.ic_sparkle), null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
+                            Spacer(Modifier.width(6.dp))
+                            Text("Assistant")
+                        }
+                    }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
             )

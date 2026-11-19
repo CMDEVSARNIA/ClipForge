@@ -106,4 +106,26 @@ class ScreenshotTest {
     }
 
     @Test fun settings() = shot("05_settings") { SettingsScreen(onBack = {}) }
+
+    @Test fun assistant() = shot("06_assistant") {
+        com.clipforge.ui.assistant.AssistantContent(
+            com.clipforge.ui.assistant.AssistantViewModel.UiState(
+                projectName = "Valorant ranked night.mp4",
+                items = listOf(
+                    com.clipforge.assistant.ChatItem.User("Make clip 2 shorter and give the top 3 punchier titles"),
+                    com.clipforge.assistant.ChatItem.Action("trim_clip", "Clip 2: 17.0s → 12.5s (5:01.5–5:14.0).", false),
+                    com.clipforge.assistant.ChatItem.Action("get_clip_details", "", false),
+                    com.clipforge.assistant.ChatItem.Action("set_title", "Clip 1 title: \"1v4 with a SHERIFF?!\"", false),
+                    com.clipforge.assistant.ChatItem.Action("set_title", "Clip 2 title: \"Through-smoke Op flick\"", false),
+                    com.clipforge.assistant.ChatItem.Action("set_title", "Clip 3 title: \"Ninja defuse, 0.2s left\"", false),
+                    com.clipforge.assistant.ChatItem.Assistant("Done. Clip 2 now ends right after the flick (12.5 s), and all three titles lead with the moment."),
+                    com.clipforge.assistant.ChatItem.User("Split layout on clip 3"),
+                    com.clipforge.assistant.ChatItem.Action("set_layout", "No facecam is set up for this project yet (project screen → Facecam → Set up).", true),
+                    com.clipforge.assistant.ChatItem.Assistant("There's no facecam on this project yet. Set one up from the project screen (Facecam → Set up), then ask again."),
+                ),
+                canUndo = true, costUsd = 0.0213, model = "claude-sonnet-5-5",
+            ),
+            {}, {}, {}, {}, {},
+        )
+    }
 }

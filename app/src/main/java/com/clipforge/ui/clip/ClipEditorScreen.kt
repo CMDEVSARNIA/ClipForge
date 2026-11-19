@@ -21,6 +21,8 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import com.clipforge.data.db.ClipEntity
+import com.clipforge.util.ShareClips
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -242,6 +244,7 @@ fun ExportTab(clip: ClipEntity, exportRun: String?, onExport: () -> Unit) {
             contentPadding = PaddingValues(vertical = 16.dp),
             modifier = Modifier.fillMaxWidth(),
         ) { Text(if (clip.exportedAt != null) "Export again" else "Export clip", style = MaterialTheme.typography.titleMedium) }
+        if (clip.exportedAt != null) ShareRow(clip)
         Text(
             exportRun?.let { "Exporting… $it" }
                 ?: clip.exportedAt?.let { "Exported · saved in Movies/ClipForge" }
@@ -290,5 +293,30 @@ private fun ClipPlayer(vm: ClipEditorViewModel, modifier: Modifier, isPlaying: B
                 Icon(painterResource(R.drawable.ic_play), null, tint = Color.White, modifier = Modifier.size(32.dp))
             }
         }
+    }
+}
+
+@Composable
+fun ShareRow(clip: ClipEntity) {
+    val context = LocalContext.current
+    var message by remember { mutableStateOf<String?>(null) }
+    fun go(t: ShareClips.Target) {
+        message = when (ShareClips.share(context, clip, t)) {
+            ShareClips.Result.Opened -> "Caption copied: paste it into the post."
+            ShareClips.Result.FileMissing -> "The exported file is gone from your gallery. Export again."
+            ShareClips.Result.NotExported -> "Export the clip first."
+        }
+    }
+    Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
+        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            ShareClips.Target.entries.filter { ShareClips.isInstalled(context, it) }.forEach { t ->
+                androidx.compose.material3.OutlinedButton(onClick = { go(t) }, shape = RoundedCornerShape(50)) {
+                    if (t == ShareClips.Target.ANY) Icon(painterResource(R.drawable.ic_share), null, Modifier.size(16.dp)) else Unit
+                    if (t == ShareClips.Target.ANY) Spacer(Modifier.width(6.dp))
+                    Text(if (t == ShareClips.Target.ANY) "Share" else t.label)
+                }
+            }
+        }
+        message?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp)) }
     }
 }

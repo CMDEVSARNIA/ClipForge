@@ -4,9 +4,19 @@ Android app that turns long gameplay recordings into vertical (9:16) TikTok / Yo
 Claude picks the moments and writes titles, and every Claude call goes through a small Cloudflare
 Worker so the Anthropic API key never ships inside the APK.
 
-> **Status: Phase 5 of 6: titles & speech captions.** See [Roadmap](#roadmap).
+> **Status: all 6 phases built.** See [Roadmap](#roadmap) and [Known limits](#known-limits).
 
 ## What works now
+
+### Phase 6: assistant & share
+
+- **Assistant** (project screen → *Assistant*): a chat scoped to the project that edits clips through **tool use**: `trim_clip`, `set_clip_range`, `set_crop`, `set_layout`, `set_title`, `set_hashtags`, `set_overlays`, `get_clip_details`. Ask things like "make clip 2 shorter", "punchier titles for the top 3", or "Split on every clip".
+  - It runs its own tool loop on the phone (Messages API through the Worker; the Worker allows only client-side tools). The tools are `strict`, `tool_choice` is `auto` (Sonnet 5.5 rejects forced tool use), all results for a turn go back in one message, and the loop stops after 8 steps.
+  - The history is **append-only**: assistant turns are stored and re-sent exactly as returned, thinking blocks included, because Sonnet 5.5's preserved thinking requires it. "New chat" starts fresh; nothing is trimmed.
+  - Every user message carries a one-line-per-clip state summary, so manual edits are always visible to Claude. The request uses prompt caching (`cache_control`) to keep the multi-step loop cheap.
+  - Changes apply immediately. **Undo** reverts everything the last request changed. Chat cost is shown live.
+  - It can't export, share or delete; it tells you where to do that.
+- **Share:** in a clip's Export tab, or with the share icon on an exported clip's row. **TikTok** and **YouTube** buttons appear when those apps are installed, and **Share** opens the Android share sheet. The title and hashtags are copied to the clipboard, because TikTok ignores shared text. If the exported file was deleted, you're told to export again.
 
 ### Phase 5: titles & speech captions
 
@@ -147,6 +157,9 @@ app/src/main/java/com/clipforge/
                            Transformer exporter, batch ExportWorker
   ui/clip/                 Trim + framing + layout editor
   ui/cam/                  Facecam preset setup
+  assistant/               Chat tools (pure), protocol, append-only store, tool loop
+  ui/assistant/            Chat screen
+  util/ShareClips.kt       TikTok / YouTube / share sheet
   captions/                whisper JNI wrapper, model download, PCM extraction, speech filter,
                            phrasing, Claude polish + titles, CaptionWorker
 app/src/main/cpp/          CMake + JNI bridge + shared transcription core (whisper.cpp submodule)
@@ -165,7 +178,7 @@ downscaled immediately (≤192 px, LRU-capped at 4 MB). Long files never load fu
 3. ✅ Vertical edit & export (Media3 Transformer, 1080×1920 H.264/AAC, crop modes per segment, WorkManager)
 4. ✅ Webcam layouts (facecam presets, split / PiP)
 5. ✅ Titles & captions (on-device whisper.cpp, word-highlight captions, Claude-polished text)
-6. In-app assistant with tool use + share sheet
+6. ✅ In-app assistant with tool use + share sheet
 
 ## Cloudflare Worker (required for Claude features)
 
@@ -254,3 +267,10 @@ curl -L -o /tmp/tiny.bin https://huggingface.co/ggerganov/whisper.cpp/resolve/ma
 
 The unit test `CaptionMathTest` uses that JFK output as a fixture. `TextRenderTest` (Robolectric, native graphics) renders the
 title styles and captions to `app/build/text-render/*.png` with the platform-UI zones marked in red.
+
+## Known limits
+
+- **Device-verified:** nothing yet. Everything above was built and tested in a Linux container without an emulator: unit tests (122), lint, real renders of the GPU layouts (WebGL, same shaders), text overlays and screens (Robolectric), and whisper.cpp transcription (host build of the same code). First runs on a phone may surface device-specific issues (encoders, GPU drivers, decoders).
+- **Claude prompts haven't been exercised with a real key here.** Request shapes follow the current docs and pass the Worker's validator; output quality needs a real run.
+- **Speed is unmeasured** for frame sampling on 60-minute files, 1080×1920@60 export with blur, and whisper on mid-range phones.
+- Room migrations are automatic (v1→v5). The schemas are in `app/schemas/`.

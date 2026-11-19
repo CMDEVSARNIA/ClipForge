@@ -136,6 +136,9 @@ interface ClipDao {
     @Update
     suspend fun update(clip: ClipEntity)
 
+    @Query("SELECT id FROM clips WHERE projectId = :projectId ORDER BY rank ASC")
+    suspend fun idsForProject(projectId: Long): List<Long>
+
     @Query("SELECT * FROM clips WHERE id IN (:ids) ORDER BY rank ASC")
     suspend fun getAll(ids: List<Long>): List<ClipEntity>
 
