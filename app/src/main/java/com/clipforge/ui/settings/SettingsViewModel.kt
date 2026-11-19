@@ -8,6 +8,7 @@ import androidx.lifecycle.viewmodel.viewModelFactory
 import com.clipforge.ClipForgeApp
 import com.clipforge.captions.SpeechModel
 import com.clipforge.export.SafeZones
+import com.clipforge.export.CaptionStyle
 import com.clipforge.export.TextConfig
 import com.clipforge.export.TextRenderer
 import com.clipforge.export.TitleStyle
@@ -61,6 +62,12 @@ class SettingsViewModel(
         val wmSize: WatermarkSize = WatermarkSize.M,
         val wmHasLogo: Boolean = false,
         val wmPreview: android.graphics.Bitmap? = null,
+        val defCaptionStyle: CaptionStyle = CaptionStyle.CLASSIC,
+        val defHookTeaser: Boolean = false,
+        val apMinTier: String = "A",
+        val apMax: Int = 5,
+        val apCaptions: Boolean = true,
+        val apAfterImport: Boolean = false,
     )
 
     private val _state = MutableStateFlow(UiState())
@@ -77,6 +84,8 @@ class SettingsViewModel(
                     modelReady = SpeechModel.entries.associateWith { m -> models.isReady(m) },
                     wmEnabled = s.watermarkEnabled, wmText = s.watermarkText, wmPosition = WatermarkPosition.of(s.watermarkPosition),
                     wmOpacity = s.watermarkOpacity, wmSize = WatermarkSize.of(s.watermarkSize), wmHasLogo = watermarks.hasLogo(),
+                    defCaptionStyle = CaptionStyle.of(s.defaultCaptionStyle), defHookTeaser = s.defaultHookTeaser,
+                    apMinTier = s.autopilotMinTier, apMax = s.autopilotMaxClips, apCaptions = s.autopilotCaptions, apAfterImport = s.autopilotAfterImport,
                 )
             }
             renderPreview()
@@ -93,6 +102,15 @@ class SettingsViewModel(
         _state.update { it.copy(useTrends = v) }
         viewModelScope.launch { repo.setUseTrends(v) }
     }
+
+    // ---- defaults & autopilot ----
+
+    fun setDefCaptionStyle(v: CaptionStyle) { _state.update { it.copy(defCaptionStyle = v) }; viewModelScope.launch { repo.setDefaults(captionStyle = v.name) } }
+    fun setDefHookTeaser(v: Boolean) { _state.update { it.copy(defHookTeaser = v) }; viewModelScope.launch { repo.setDefaults(hookTeaser = v) } }
+    fun setApMinTier(v: String) { _state.update { it.copy(apMinTier = v) }; viewModelScope.launch { repo.setAutopilot(minTier = v) } }
+    fun setApMax(v: Int) { _state.update { it.copy(apMax = v) }; viewModelScope.launch { repo.setAutopilot(maxClips = v) } }
+    fun setApCaptions(v: Boolean) { _state.update { it.copy(apCaptions = v) }; viewModelScope.launch { repo.setAutopilot(captions = v) } }
+    fun setApAfterImport(v: Boolean) { _state.update { it.copy(apAfterImport = v) }; viewModelScope.launch { repo.setAutopilot(afterImport = v) } }
 
     // ---- watermark ----
 

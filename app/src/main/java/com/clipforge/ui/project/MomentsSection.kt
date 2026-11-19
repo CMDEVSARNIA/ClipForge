@@ -82,6 +82,7 @@ fun AnalyzeCard(
     onFindMoments: () -> Unit,
     onCancel: () -> Unit,
     onOpenSettings: () -> Unit,
+    onAutopilot: (() -> Unit)? = null,
 ) {
     Surface(
         shape = RoundedCornerShape(16.dp),
@@ -114,6 +115,13 @@ fun AnalyzeCard(
                             Icon(painterResource(R.drawable.ic_sparkle), null, Modifier.size(18.dp))
                             Spacer(Modifier.width(6.dp))
                             Text(if (clipCount > 0) "Re-run" else "Find moments")
+                        }
+                    }
+                    if (clipCount > 0 && onAutopilot != null) {
+                        OutlinedButton(onClick = onAutopilot) {
+                            Icon(painterResource(R.drawable.ic_sparkle), null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
+                            Spacer(Modifier.width(6.dp))
+                            Text("Autopilot: caption & export the best")
                         }
                     }
                     analysis?.trendSummary?.takeIf { analysis.status == "DONE" }?.let {
@@ -149,21 +157,21 @@ fun AnalyzeSheet(
     initialGame: String,
     onDismiss: () -> Unit,
 ) {
+    var autopilot by remember { mutableStateOf(false) }
     val settings = vm.settings.value ?: return
     var game by rememberSaveable { mutableStateOf(initialGame) }
     val estimate: CostEstimator.Estimate? = remember(game.isBlank(), settings) { vm.estimate(game) }
     val context = LocalContext.current
-    val notifPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) {
-        vm.startAnalysis(game)
+    fun launch() {
+        if (autopilot) vm.startAutopilot(game, reanalyze = true) else vm.startAnalysis(game)
         onDismiss()
     }
-    fun start() {
+    val notifPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { launch() }
+    fun start(withAutopilot: Boolean) {
+        autopilot = withAutopilot
         val needsAsk = Build.VERSION.SDK_INT >= 33 &&
             ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED
-        if (needsAsk) notifPermission.launch(Manifest.permission.POST_NOTIFICATIONS) else {
-            vm.startAnalysis(game)
-            onDismiss()
-        }
+        if (needsAsk) notifPermission.launch(Manifest.permission.POST_NOTIFICATIONS) else launch()
     }
 
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = rememberModalBottomSheetState(skipPartiallyExpanded = true)) {
@@ -200,7 +208,17 @@ fun AnalyzeSheet(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            Button(onClick = ::start, modifier = Modifier.fillMaxWidth()) { Text("Start analysis") }
+            Button(onClick = { start(false) }, modifier = Modifier.fillMaxWidth()) { Text("Find moments") }
+            OutlinedButton(onClick = { start(true) }, modifier = Modifier.fillMaxWidth()) {
+                Icon(painterResource(R.drawable.ic_sparkle), null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
+                Spacer(Modifier.width(6.dp))
+                Text("Autopilot: find, caption & export the best")
+            }
+            Text(
+                "Autopilot exports ${settings.autopilotMinTier}-tier or better, up to ${settings.autopilotMaxClips} clips, using your defaults (Settings → Defaults & autopilot).",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
     }
 }

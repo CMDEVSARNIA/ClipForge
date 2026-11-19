@@ -94,6 +94,12 @@ data class ClipEntity(
     @ColumnInfo(defaultValue = "NONE") val captionStatus: String = "NONE",
     @ColumnInfo(defaultValue = "1") val showCaptions: Boolean = true,
     val captionLang: String? = null,
+    /** CLASSIC, BOX, KARAOKE, BOLD_CAPS, CLEAN */
+    @ColumnInfo(defaultValue = "CLASSIC") val captionStyle: String = "CLASSIC",
+    /** Prepend a short flash of the payoff before the clip starts. */
+    @ColumnInfo(defaultValue = "0") val hookTeaser: Boolean = false,
+    /** Teaser start chosen by the user (source ms); null = picked from the loudest moment. */
+    val teaserStartMs: Long? = null,
 ) {
     val lengthMs: Long get() = endMs - startMs
 }

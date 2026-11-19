@@ -8,6 +8,8 @@ import com.clipforge.export.CropMath
 import com.clipforge.export.CropMode
 import com.clipforge.export.PipCorner
 import com.clipforge.export.TitleStyle
+import com.clipforge.export.CaptionStyle
+import com.clipforge.export.HookTeaser
 import com.clipforge.util.TimeFormat
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -123,6 +125,24 @@ object ChatTools {
             listOf("clip", "hashtags"),
         ))
         add(strictTool(
+            "set_caption_style",
+            "Change how speech captions look. CLASSIC: white with a yellow pop. BOX: spoken word on a coral block. KARAOKE: words light up as spoken. BOLD_CAPS: big uppercase, green pop. CLEAN: no outline, coral underline. clip 0 means every clip.",
+            {
+                clipProp()
+                enumProp("style", CaptionStyle.entries.map { it.name }, "Caption style.")
+            },
+            listOf("clip", "style"),
+        ))
+        add(strictTool(
+            "set_hook_teaser",
+            "Turn the hook teaser on or off: a 1.2 s flash of the clip's payoff, labeled 'Wait for it…', before the clip starts. Good for clips with a slow opening. clip 0 means every clip.",
+            {
+                clipProp()
+                putJsonObject("enabled") { put("type", "boolean") }
+            },
+            listOf("clip", "enabled"),
+        ))
+        add(strictTool(
             "set_overlays",
             "Turn the title overlay and/or speech captions on or off for a clip. clip 0 means every clip.",
             {
@@ -138,11 +158,12 @@ object ChatTools {
 
     /** One line per clip, sent with each user message so Claude always sees the current state. */
     fun stateSummary(st: ProjectState): String = buildString {
-        appendLine("Clips (rank · tier · score · range · length · crop · layout · title):")
+        appendLine("Clips (rank · tier · score · range · length · crop · layout · caption style · teaser · title):")
         st.clips.sortedBy { it.rank }.forEach { c ->
             appendLine(
                 "${c.rank} · ${c.tier} · ${c.score} · ${TimeFormat.format(c.startMs, true)}–${TimeFormat.format(c.endMs, true)} · ${s(c.endMs - c.startMs)} · " +
-                    "${if (c.segmentsJson != null) "custom segments" else c.cropMode} · ${c.camLayout} · \"${c.title}\"" +
+                    "${if (c.segmentsJson != null) "custom segments" else c.cropMode} · ${c.camLayout} · ${c.captionStyle.lowercase()} captions" +
+                    (if (c.hookTeaser) " · teaser" else "") + " · \"${c.title}\"" +
                     (if (c.exportedAt != null) " · exported" else "")
             )
         }
@@ -225,6 +246,21 @@ object ChatTools {
                 val tags = MomentParser.normalizeHashtags(input["hashtags"]).take(5)
                 if (tags.isEmpty()) return err("No valid hashtags.")
                 ToolOutcome(listOf(c.copy(hashtags = tags.joinToString(" "))), "Clip ${c.rank} hashtags: ${tags.joinToString(" ")}.")
+            }
+            "set_caption_style" -> {
+                val style = CaptionStyle.entries.firstOrNull { it.name == input.str("style") } ?: return err("Unknown caption style.")
+                val targets = if (all) st.clips else listOf(clip!!)
+                val note = if (targets.all { it.captionsJson == null }) " (no captions generated yet; it applies once they are)" else ""
+                ToolOutcome(targets.map { it.copy(captionStyle = style.name) }, "${if (all) "All clips" else "Clip $rank"}: ${style.label} captions$note.")
+            }
+            "set_hook_teaser" -> {
+                val on = (input["enabled"] as? JsonPrimitive)?.contentOrNull == "true"
+                val targets = if (all) st.clips else listOf(clip!!)
+                val tooShort = targets.filter { on && it.endMs - it.startMs < HookTeaser.MIN_CLIP_MS }.map { it.rank }
+                val changed = targets.filter { !(on && it.rank in tooShort) }.map { it.copy(hookTeaser = on) }
+                if (changed.isEmpty()) return err("Clip${if (tooShort.size == 1) "" else "s"} ${tooShort.joinToString()} ${if (tooShort.size == 1) "is" else "are"} too short for a teaser (6 s minimum).")
+                ToolOutcome(changed, "${if (all) "All clips" else "Clip $rank"}: hook teaser ${if (on) "on" else "off"}." +
+                    if (tooShort.isNotEmpty()) " Skipped ${tooShort.joinToString()} (under 6 s)." else "")
             }
             "set_overlays" -> {
                 val t = input.str("title")

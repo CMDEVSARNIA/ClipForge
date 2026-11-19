@@ -8,6 +8,13 @@ Worker so the Anthropic API key never ships inside the APK.
 
 ## What works now
 
+### Autopilot, caption styles, hook teaser (v0.8)
+
+- **Autopilot:** one tap goes from a raw recording to finished clips. It finds moments, then captions and titles the best ones, then exports them, and you get a "N clips ready" notification. Start it from the *Find moments* sheet or the project card, or have it run after every import. Configure it in **Settings → Defaults & autopilot**: which tiers (S / S+A / S+A+B), up to 3/5/10 clips, captions on or off.
+- **Caption styles:** **Classic** (yellow pop), **Box** (coral block), **Karaoke** (words light up; upcoming words dimmed), **Bold caps** (big uppercase, green pop), **Clean** (no outline, coral underline). Choose per clip in the Text tab; new clips start with the default from Settings.
+- **Hook teaser:** a 1.2 s flash of the clip's payoff, labeled "Wait for it…", before the clip starts. The payoff is the loudest moment in the back two-thirds of the clip, or wherever you tap *Set teaser here*. *Preview* plays the teaser, then the clip. Clips under 6 s get no teaser.
+- The assistant can do both: `set_caption_style` and `set_hook_teaser` ("karaoke captions on every clip", "add a teaser to clip 2").
+
 ### Watermark (Settings → Watermark)
 
 - Your **@handle** and/or a **logo** (any image; PNG transparency is kept), burned into every export and shown in the editor's 9:16 preview.

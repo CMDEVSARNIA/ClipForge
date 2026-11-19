@@ -74,6 +74,7 @@ class ClipExporter(private val context: Context) {
         targetFps: Int,
         cam: CamSpec?,
         watermark: Watermark?,
+        teaser: Pair<Long, Long>? = null,
         onProgress: (Float) -> Unit,
     ): Result {
         val warnings = ArrayList<String>()
@@ -87,12 +88,22 @@ class ClipExporter(private val context: Context) {
         val fps = ExportMath.outputFps(project.frameRate, targetFps)
         val enc = ExportMath.encodeSettings(fps)
         val text = TextConfig.forClip(clip, clip.startMs, endMs, cam, watermark = watermark).takeIf { !it.isEmpty }
-        val items = segs.mapIndexed { i, s -> buildItem(source, s, cam, text, i == 0, i == segs.lastIndex, project.frameRate, fps, project.hasAudio) }
+        val main = segs.mapIndexed { i, s -> buildItem(source, s, cam, text, i == 0, i == segs.lastIndex, project.frameRate, fps, project.hasAudio) }
+        // Hook teaser: the payoff first, framed like the segment it comes from, labeled "Wait for it…".
+        val teaserItem = teaser?.let { (ts, te) ->
+            val base = segs[SegmentPlanner.indexAt(segs, ts)]
+            val seg = base.copy(startMs = ts, endMs = te)
+            val label = TextConfig.forClip(clip, ts, te, cam, title = HookTeaser.LABEL, showTitle = true, showCaptions = false, watermark = watermark)
+            buildItem(source, seg, cam, label, true, true, project.frameRate, fps, project.hasAudio, fadeInUs = 40_000, fadeOutUs = 80_000)
+        }
+        val items = listOfNotNull(teaserItem) + main
+        if (teaserItem != null) warnings += "Added a ${HookTeaser.LENGTH_MS / 1000.0}s hook teaser."
+        val teaserMs = teaser?.let { it.second - it.first } ?: 0L
 
         val tmp = File(context.cacheDir, "export/${clip.id}_${System.currentTimeMillis()}.mp4").also { it.parentFile?.mkdirs() }
         val fixed = File(tmp.path.removeSuffix(".mp4") + "_fs.mp4")
         try {
-            runTransformer(items, tmp.path, enc, endMs - clip.startMs, onProgress, warnings)
+            runTransformer(items, tmp.path, enc, endMs - clip.startMs + teaserMs, onProgress, warnings)
             // +faststart: the muxer only *attempts* it, so verify and relocate moov if needed.
             val output = withContext(Dispatchers.IO) {
                 if (Mp4FastStart.ensure(tmp, fixed)) tmp else fixed
@@ -116,6 +127,8 @@ class ClipExporter(private val context: Context) {
         sourceFps: Float,
         fps: Int,
         hasAudio: Boolean,
+        fadeInUs: Long = ExportMath.FADE_IN_US,
+        fadeOutUs: Long = ExportMath.FADE_OUT_US,
     ): EditedMediaItem {
         val media = MediaItem.Builder()
             .setUri(source)
@@ -137,8 +150,8 @@ class ClipExporter(private val context: Context) {
         val audio = ArrayList<AudioProcessor>()
         if (hasAudio) {
             audio += SonicAudioProcessor().apply { setOutputSampleRateHz(48_000) }
-            val inUs = if (first) ExportMath.FADE_IN_US else 0L
-            val outUs = if (last) ExportMath.FADE_OUT_US else 0L
+            val inUs = if (first) fadeInUs else 0L
+            val outUs = if (last) fadeOutUs else 0L
             if (inUs > 0 || outUs > 0) audio += FadeAudioProcessor(seg.lengthMs * 1000, inUs, outUs)
         }
         return EditedMediaItem.Builder(media).setEffects(Effects(audio, video)).build()

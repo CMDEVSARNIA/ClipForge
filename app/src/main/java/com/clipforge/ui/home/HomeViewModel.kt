@@ -21,9 +21,12 @@ import kotlinx.coroutines.flow.receiveAsFlow
 import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
 
+@androidx.annotation.OptIn(androidx.media3.common.util.UnstableApi::class)
 class HomeViewModel(
+    private val app: android.app.Application,
     private val repo: ProjectRepository,
     val thumbnails: ThumbnailLoader,
+    private val settings: com.clipforge.settings.SettingsRepository,
 ) : ViewModel() {
 
     val projects: StateFlow<List<ProjectEntity>?> =
@@ -51,6 +54,14 @@ class HomeViewModel(
                 } else if (result.alreadyImported) {
                     _events.send(Event.Message("Already imported, opening the existing project."))
                 }
+                // Autopilot after import (Settings): only for new projects, and only when connected.
+                if (!result.alreadyImported) {
+                    val s = settings.current()
+                    if (s.autopilotAfterImport && s.isConnected) {
+                        com.clipforge.autopilot.AutopilotWorker.enqueue(app, result.projectId, null, reanalyze = false)
+                        _events.send(Event.Message("Autopilot started: you'll get a notification when the clips are ready."))
+                    }
+                }
                 _events.send(Event.Open(result.projectId))
             } catch (e: NotAVideoException) {
                 _events.send(Event.Message(e.message ?: "Not a playable video."))
@@ -70,7 +81,7 @@ class HomeViewModel(
         val Factory = viewModelFactory {
             initializer {
                 val app = this[APPLICATION_KEY] as ClipForgeApp
-                HomeViewModel(app.container.projects, app.container.thumbnails)
+                HomeViewModel(app, app.container.projects, app.container.thumbnails, app.container.settings)
             }
         }
     }

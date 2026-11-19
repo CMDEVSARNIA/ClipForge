@@ -37,6 +37,7 @@ import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import com.clipforge.analysis.AnalysisWorker
 import com.clipforge.export.ExportWorker
+import com.clipforge.autopilot.AutopilotWorker
 import com.clipforge.captions.CaptionWorker
 import com.clipforge.analysis.CostEstimator
 import com.clipforge.data.db.AnalysisDao
@@ -178,6 +179,36 @@ class ProjectViewModel(
     }
 
     fun cancelCaptions() = CaptionWorker.cancel(app, projectId)
+
+    // ---- autopilot ----
+
+    val autopilotRun: StateFlow<ExportRun?> = WorkManager.getInstance(app)
+        .getWorkInfosForUniqueWorkFlow(AutopilotWorker.uniqueName(projectId))
+        .map { infos ->
+            val info = infos.lastOrNull() ?: return@map null
+            val running = info.state == WorkInfo.State.RUNNING || info.state == WorkInfo.State.ENQUEUED || info.state == WorkInfo.State.BLOCKED
+            val n = info.outputData.getInt(AutopilotWorker.KEY_EXPORTED, 0)
+            val err = info.outputData.getString(AutopilotWorker.KEY_ERROR)
+            ExportRun(
+                running = running,
+                fraction = info.progress.getFloat(AutopilotWorker.KEY_FRACTION, 0f),
+                step = info.progress.getString(AutopilotWorker.KEY_STEP) ?: if (running) "Starting…" else "",
+                message = when (info.state) {
+                    WorkInfo.State.SUCCEEDED -> if (n > 0) "Autopilot: $n clip${if (n == 1) "" else "s"} ready in Movies/ClipForge." else "Autopilot: no clips reached the tier set in Settings."
+                    WorkInfo.State.FAILED -> "Autopilot stopped: ${err ?: "unknown error"}"
+                    WorkInfo.State.CANCELLED -> "Autopilot cancelled."
+                    else -> null
+                },
+            )
+        }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
+    fun startAutopilot(game: String, reanalyze: Boolean) {
+        player.pause()
+        AutopilotWorker.enqueue(app, projectId, game.trim().ifBlank { null }, reanalyze)
+    }
+
+    fun cancelAutopilot() = AutopilotWorker.cancel(app, projectId)
 
     // ---- facecam ----
 

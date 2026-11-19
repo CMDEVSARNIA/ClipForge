@@ -22,6 +22,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import com.clipforge.export.TitleStyle
+import com.clipforge.export.CaptionStyle
 
 @Composable
 fun TextSection(st: ClipEditorViewModel.State, captionRun: String?, vm: ClipEditorViewModel) {
@@ -65,6 +66,11 @@ fun TextSection(st: ClipEditorViewModel.State, captionRun: String?, vm: ClipEdit
                     )
                 }
                 Switch(checked = st.showCaptions, onCheckedChange = vm::setShowCaptions, enabled = st.captionWords.isNotEmpty())
+            }
+            if (st.captionWords.isNotEmpty()) {
+                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    CaptionStyle.entries.forEach { s -> FilterChip(selected = st.captionStyle == s, onClick = { vm.setCaptionStyle(s) }, label = { Text(s.label) }) }
+                }
             }
             OutlinedButton(onClick = vm::generateCaptions, enabled = captionRun == null) {
                 Text(if (st.captionStatus == "NONE") "Generate captions & titles" else "Regenerate captions & titles")

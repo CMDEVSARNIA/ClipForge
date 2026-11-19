@@ -33,6 +33,14 @@ data class AppSettings(
     val watermarkPosition: String = "MOVING",
     val watermarkOpacity: Float = 0.7f,
     val watermarkSize: String = "M",
+    /** Defaults for new clips. */
+    val defaultCaptionStyle: String = "CLASSIC",
+    val defaultHookTeaser: Boolean = false,
+    /** Autopilot: lowest tier exported (S, A or B), how many clips at most, and whether to caption. */
+    val autopilotMinTier: String = "A",
+    val autopilotMaxClips: Int = 5,
+    val autopilotCaptions: Boolean = true,
+    val autopilotAfterImport: Boolean = false,
 ) {
     val isConnected: Boolean get() = workerUrl.isNotBlank() && appToken.isNotBlank()
 
@@ -58,6 +66,12 @@ class SettingsRepository(private val context: Context) {
         val wmPosition = stringPreferencesKey("wm_position")
         val wmOpacity = androidx.datastore.preferences.core.floatPreferencesKey("wm_opacity")
         val wmSize = stringPreferencesKey("wm_size")
+        val defCaptionStyle = stringPreferencesKey("def_caption_style")
+        val defHookTeaser = booleanPreferencesKey("def_hook_teaser")
+        val apMinTier = stringPreferencesKey("ap_min_tier")
+        val apMax = androidx.datastore.preferences.core.intPreferencesKey("ap_max")
+        val apCaptions = booleanPreferencesKey("ap_captions")
+        val apAfterImport = booleanPreferencesKey("ap_after_import")
     }
 
     val settings: Flow<AppSettings> = context.dataStore.data.map { p ->
@@ -75,6 +89,12 @@ class SettingsRepository(private val context: Context) {
             watermarkPosition = p[Keys.wmPosition] ?: "MOVING",
             watermarkOpacity = p[Keys.wmOpacity] ?: 0.7f,
             watermarkSize = p[Keys.wmSize] ?: "M",
+            defaultCaptionStyle = p[Keys.defCaptionStyle] ?: "CLASSIC",
+            defaultHookTeaser = p[Keys.defHookTeaser] ?: false,
+            autopilotMinTier = p[Keys.apMinTier] ?: "A",
+            autopilotMaxClips = p[Keys.apMax] ?: 5,
+            autopilotCaptions = p[Keys.apCaptions] ?: true,
+            autopilotAfterImport = p[Keys.apAfterImport] ?: false,
         )
     }
 
@@ -114,6 +134,19 @@ class SettingsRepository(private val context: Context) {
         opacity?.let { p[Keys.wmOpacity] = it.coerceIn(0.2f, 1f) }
         size?.let { p[Keys.wmSize] = it }
     }
+
+    suspend fun setDefaults(captionStyle: String? = null, hookTeaser: Boolean? = null) = context.dataStore.edit { p ->
+        captionStyle?.let { p[Keys.defCaptionStyle] = it }
+        hookTeaser?.let { p[Keys.defHookTeaser] = it }
+    }
+
+    suspend fun setAutopilot(minTier: String? = null, maxClips: Int? = null, captions: Boolean? = null, afterImport: Boolean? = null) =
+        context.dataStore.edit { p ->
+            minTier?.let { p[Keys.apMinTier] = it }
+            maxClips?.let { p[Keys.apMax] = it.coerceIn(1, 20) }
+            captions?.let { p[Keys.apCaptions] = it }
+            afterImport?.let { p[Keys.apAfterImport] = it }
+        }
 
     suspend fun setExportFps(fps: Int) = context.dataStore.edit { it[Keys.exportFps] = if (fps > 30) 60 else 30 }
 }

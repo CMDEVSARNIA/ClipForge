@@ -27,6 +27,20 @@ enum class TitleStyle(val label: String) {
     }
 }
 
+/** Word-by-word caption looks. [activeScale] is how much the spoken word grows. */
+enum class CaptionStyle(val label: String, val activeScale: Float) {
+    CLASSIC("Classic", 1.1f),     // white, black outline, yellow pop on the spoken word
+    BOX("Box", 1.0f),             // spoken word on a coral block
+    KARAOKE("Karaoke", 1.0f),     // spoken words light up, upcoming words dimmed
+    BOLD_CAPS("Bold caps", 1.15f),// big uppercase, heavy outline, green pop
+    CLEAN("Clean", 1.0f),         // no outline, soft shadow, coral underline
+    ;
+
+    companion object {
+        fun of(name: String?) = entries.firstOrNull { it.name == name } ?: CLASSIC
+    }
+}
+
 /** Creator watermark: a handle and/or logo, kept in a safe corner (or hopping between them). */
 data class Watermark(
     val text: String,
@@ -46,6 +60,7 @@ data class TextConfig(
     val watermark: Watermark? = null,
     val cam: CamSpec? = null,
     val pip: NRect? = null,
+    val captionStyle: CaptionStyle = CaptionStyle.CLASSIC,
 ) {
     val isEmpty: Boolean get() = title.isNullOrBlank() && phrases.isEmpty() && watermark == null
 
@@ -53,7 +68,7 @@ data class TextConfig(
         fun forClip(clip: ClipEntity, startMs: Long, endMs: Long, cam: CamSpec?, title: String = clip.title,
                     showTitle: Boolean = clip.showTitle, style: TitleStyle = TitleStyle.of(clip.titleStyle),
                     showCaptions: Boolean = clip.showCaptions, words: List<CaptionWord> = CaptionMath.decode(clip.captionsJson),
-                    watermark: Watermark? = null): TextConfig {
+                    watermark: Watermark? = null, captionStyle: CaptionStyle = CaptionStyle.of(clip.captionStyle)): TextConfig {
             val pip = SafeZones.pipRect(cam)
             val inClip = if (showCaptions) words.filter { it.endMs > startMs && it.startMs < endMs } else emptyList()
             var titleBox = SafeZones.titleBox(cam, pip)
@@ -71,6 +86,7 @@ data class TextConfig(
                 watermark = watermark,
                 cam = cam,
                 pip = pip,
+                captionStyle = captionStyle,
             )
         }
     }
@@ -96,7 +112,7 @@ class TextRenderer(private val outW: Int, private val outH: Int) {
         val c = Canvas(bmp)
         c.scale(outW / SafeZones.W, outH / SafeZones.H)
         cfg.title?.let { drawTitle(c, it, cfg.titleStyle, cfg.titleBox) }
-        active?.let { (pi, wi) -> drawCaption(c, cfg.phrases[pi], wi, cfg.captionBox) }
+        active?.let { (pi, wi) -> drawCaption(c, cfg.phrases[pi], wi, cfg.captionBox, cfg.captionStyle) }
         if (cfg.watermark != null && corner != null) drawWatermark(c, cfg.watermark, corner)
         return bmp
     }
@@ -176,12 +192,13 @@ class TextRenderer(private val outW: Int, private val outH: Int) {
         c.restore()
     }
 
-    private fun drawCaption(c: Canvas, phrase: CaptionPhrase, active: Int, box: Box) {
+    private fun drawCaption(c: Canvas, phrase: CaptionPhrase, active: Int, box: Box, style: CaptionStyle) {
         val paint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply { typeface = heavy }
-        val words = phrase.words.map { it.text }
-        var size = 88f
-        // Each slot reserves room for the 1.1× highlighted size, so the line never shifts as the highlight moves.
-        fun widths() = words.map { paint.measureText(it) * ACTIVE_SCALE }
+        val words = phrase.words.map { if (style == CaptionStyle.BOLD_CAPS) it.text.uppercase() else it.text }
+        var size = if (style == CaptionStyle.BOLD_CAPS) 100f else 88f
+        val scale = style.activeScale
+        // Each slot reserves room for the highlighted size, so the line never shifts as the highlight moves.
+        fun widths() = words.map { paint.measureText(it) * scale + if (style == CaptionStyle.BOX) 28f else 0f }
         paint.textSize = size
         var space = paint.measureText(" ")
         var ws = widths()
@@ -193,28 +210,58 @@ class TextRenderer(private val outW: Int, private val outH: Int) {
             val half = (words.size + 1) / 2
             listOf((0 until half).toList(), (half until words.size).toList())
         } else listOf(words.indices.toList())
-        val lineH = size * 1.15f
+        val lineH = size * 1.2f
         var baseline = box.t + (box.h - lineH * lines.size) / 2f + size
+        val coral = 0xFFFE624C.toInt()
         for (line in lines) {
             val lw = line.sumOf { ws[it].toDouble() }.toFloat() + space * (line.size - 1)
             var x = box.cx - lw / 2f
             for (i in line) {
                 val isActive = i == active
-                c.save()
-                val textW = ws[i] / ACTIVE_SCALE
+                val textW = paint.measureText(words[i])
                 val tx = x + (ws[i] - textW) / 2f
-                if (isActive) c.scale(ACTIVE_SCALE, ACTIVE_SCALE, x + ws[i] / 2f, baseline - size / 3f)
-                outline(paint, Color.BLACK, size * 0.18f); c.drawText(words[i], tx, baseline, paint)
-                fill(paint, if (isActive) 0xFFFFE600.toInt() else Color.WHITE); c.drawText(words[i], tx, baseline, paint)
+                c.save()
+                if (isActive && scale != 1f) c.scale(scale, scale, x + ws[i] / 2f, baseline - size / 3f)
+                when (style) {
+                    CaptionStyle.CLASSIC -> {
+                        outline(paint, Color.BLACK, size * 0.18f); c.drawText(words[i], tx, baseline, paint)
+                        fill(paint, if (isActive) 0xFFFFE600.toInt() else Color.WHITE); c.drawText(words[i], tx, baseline, paint)
+                    }
+                    CaptionStyle.BOX -> {
+                        if (isActive) {
+                            val bg = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = coral }
+                            c.drawRoundRect(RectF(tx - 14f, baseline - size * 0.86f, tx + textW + 14f, baseline + size * 0.24f), 16f, 16f, bg)
+                            fill(paint, Color.WHITE); c.drawText(words[i], tx, baseline, paint)
+                        } else {
+                            outline(paint, Color.BLACK, size * 0.14f); c.drawText(words[i], tx, baseline, paint)
+                            fill(paint, Color.WHITE); c.drawText(words[i], tx, baseline, paint)
+                        }
+                    }
+                    CaptionStyle.KARAOKE -> {
+                        val upcoming = i > active
+                        outline(paint, if (upcoming) 0x88000000.toInt() else Color.BLACK, size * 0.16f); c.drawText(words[i], tx, baseline, paint)
+                        fill(paint, when { isActive -> coral; upcoming -> 0x88FFFFFF.toInt(); else -> Color.WHITE }); c.drawText(words[i], tx, baseline, paint)
+                    }
+                    CaptionStyle.BOLD_CAPS -> {
+                        outline(paint, Color.BLACK, size * 0.24f); c.drawText(words[i], tx, baseline, paint)
+                        fill(paint, if (isActive) 0xFF3DFF6E.toInt() else Color.WHITE); c.drawText(words[i], tx, baseline, paint)
+                    }
+                    CaptionStyle.CLEAN -> {
+                        fill(paint, Color.WHITE)
+                        paint.setShadowLayer(10f, 0f, 3f, 0xCC000000.toInt())
+                        c.drawText(words[i], tx, baseline, paint)
+                        paint.clearShadowLayer()
+                        if (isActive) {
+                            val bar = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = coral }
+                            c.drawRoundRect(RectF(tx, baseline + size * 0.14f, tx + textW, baseline + size * 0.22f), 4f, 4f, bar)
+                        }
+                    }
+                }
                 c.restore()
                 x += ws[i] + space
             }
             baseline += lineH
         }
-    }
-
-    private companion object {
-        const val ACTIVE_SCALE = 1.1f
     }
 
     private fun outline(p: Paint, color: Int, width: Float) {

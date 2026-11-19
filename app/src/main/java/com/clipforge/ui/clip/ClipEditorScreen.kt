@@ -22,6 +22,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import com.clipforge.data.db.ClipEntity
 import com.clipforge.util.ShareClips
+import com.clipforge.export.HookTeaser
 import kotlinx.coroutines.launch
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.foundation.layout.Box
@@ -209,6 +210,7 @@ private fun TrimTab(st: ClipEditorViewModel.State, strip: List<androidx.compose.
             }
             EdgeControl("End", st.endMs, onMinus = { vm.nudgeEnd(-100) }, onPlus = { vm.nudgeEnd(100) })
         }
+        HookTeaserRow(st, vm)
         Row(Modifier.fillMaxWidth().padding(top = 12.dp), verticalAlignment = Alignment.CenterVertically) {
             Text(
                 "Drag the coral handles; they snap to scene cuts (white markers). Playback loops the clip.",
@@ -318,5 +320,41 @@ fun ShareRow(clip: ClipEntity) {
             }
         }
         message?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(top = 6.dp)) }
+    }
+}
+
+@Composable
+private fun HookTeaserRow(st: ClipEditorViewModel.State, vm: ClipEditorViewModel) {
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        modifier = Modifier.fillMaxWidth().padding(top = 12.dp),
+    ) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Hook teaser", style = MaterialTheme.typography.titleMedium)
+                    val range = st.teaserRange
+                    Text(
+                        when {
+                            range == null -> "Clip is too short for a teaser (6 s minimum)."
+                            !st.hookTeaser -> "Flash the payoff for ${HookTeaser.LENGTH_MS / 1000.0}s before the clip starts, labeled \"${HookTeaser.LABEL}\"."
+                            else -> "Teases ${com.clipforge.util.TimeFormat.format(range.first - st.startMs, true)} into the clip" +
+                                if (st.teaserStartMs == null) " (the loudest moment)." else " (your pick)."
+                        },
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                androidx.compose.material3.Switch(checked = st.hookTeaser, onCheckedChange = vm::setHookTeaser, enabled = st.teaserRange != null)
+            }
+            if (st.hookTeaser && st.teaserRange != null) {
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    androidx.compose.material3.OutlinedButton(onClick = vm::previewTeaser) { Text("Preview") }
+                    androidx.compose.material3.OutlinedButton(onClick = vm::setTeaserHere) { Text("Set teaser here") }
+                    if (st.teaserStartMs != null) TextButton(onClick = vm::resetTeaser) { Text("Auto") }
+                }
+            }
+        }
     }
 }

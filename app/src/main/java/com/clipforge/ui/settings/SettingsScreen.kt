@@ -129,6 +129,29 @@ fun SettingsScreen(onBack: () -> Unit, vm: SettingsViewModel = viewModel(factory
                 Text("60 fps keeps gameplay smooth; a 30 fps source stays at 30.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
 
+            Section("Defaults & autopilot") {
+                Text("New clips start with", style = MaterialTheme.typography.labelLarge)
+                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    com.clipforge.export.CaptionStyle.entries.forEach { s ->
+                        FilterChip(selected = st.defCaptionStyle == s, onClick = { vm.setDefCaptionStyle(s) }, label = { Text(s.label) })
+                    }
+                }
+                ToggleRow("Hook teaser on new clips", "Flash the payoff before the clip starts.", st.defHookTeaser, vm::setDefHookTeaser)
+                HorizontalDividerThin()
+                Text("Autopilot exports", style = MaterialTheme.typography.labelLarge)
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    listOf("S" to "S only", "A" to "S + A", "B" to "S + A + B").forEach { (t, label) ->
+                        FilterChip(selected = st.apMinTier == t, onClick = { vm.setApMinTier(t) }, label = { Text(label) })
+                    }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("Up to", style = MaterialTheme.typography.bodyMedium)
+                    listOf(3, 5, 10).forEach { n -> FilterChip(selected = st.apMax == n, onClick = { vm.setApMax(n) }, label = { Text("$n clips") }) }
+                }
+                ToggleRow("Captions & titles", "Transcribe and write titles before exporting.", st.apCaptions, vm::setApCaptions)
+                ToggleRow("Run autopilot after every import", "Import a video and get a notification when its clips are ready.", st.apAfterImport, vm::setApAfterImport)
+            }
+
             Section("Watermark") {
                 WatermarkSettings(st, vm)
             }
@@ -274,3 +297,17 @@ private fun WatermarkSettings(st: SettingsViewModel.UiState, vm: SettingsViewMod
         color = MaterialTheme.colorScheme.onSurfaceVariant,
     )
 }
+
+@Composable
+private fun ToggleRow(title: String, subtitle: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.bodyLarge)
+            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Switch(checked = checked, onCheckedChange = onChange)
+    }
+}
+
+@Composable
+private fun HorizontalDividerThin() = androidx.compose.material3.HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)

@@ -30,6 +30,8 @@ import com.clipforge.export.CamSpec
 import com.clipforge.export.CropMath
 import com.clipforge.export.TextBitmapOverlay
 import com.clipforge.export.TextConfig
+import com.clipforge.export.CaptionStyle
+import com.clipforge.export.HookTeaser
 import com.clipforge.export.TitleStyle
 import com.clipforge.captions.CaptionMath
 import com.clipforge.captions.CaptionWord
@@ -109,9 +111,19 @@ class ClipEditorViewModel(
         val hashtags: String = "",
         /** From Settings; applies to every export. */
         val watermark: com.clipforge.export.Watermark? = null,
+        val captionStyle: CaptionStyle = CaptionStyle.CLASSIC,
+        val hookTeaser: Boolean = false,
+        val teaserStartMs: Long? = null,
+        val loudnessDb: List<Float> = emptyList(),
+        val loudnessWindowS: Double = 0.5,
+        /** True while "Preview teaser" plays the teaser before jumping to the clip start. */
+        val teaserPlaying: Boolean = false,
     ) {
+        val teaserRange: Pair<Long, Long>?
+            get() = HookTeaser.range(startMs, endMs, teaserStartMs, loudnessDb, loudnessWindowS)
+
         /** Inputs of the text overlay; a new value means the preview must redraw. */
-        val textKey: Any get() = listOf(title, showTitle, titleStyle, showCaptions, captionWords, startMs, endMs, cam, watermark)
+        val textKey: Any get() = listOf(title, showTitle, titleStyle, showCaptions, captionWords, startMs, endMs, cam, watermark, captionStyle, teaserPlaying)
 
         val cam: CamSpec? get() = camRect?.takeIf { camLayout != CamLayout.NONE }?.let { CamSpec(it, camLayout, pipCorner) }
 
@@ -131,6 +143,7 @@ class ClipEditorViewModel(
                     cropMode.name != clip.cropMode || panX != clip.panX || zoomRect?.toCsv() != clip.zoomRect ||
                     camLayout.name != clip.camLayout || pipCorner.name != clip.pipCorner ||
                     showTitle != clip.showTitle || titleStyle.name != clip.titleStyle || showCaptions != clip.showCaptions ||
+                    captionStyle.name != clip.captionStyle || hookTeaser != clip.hookTeaser || teaserStartMs != clip.teaserStartMs ||
                     customSegments?.let { SegmentPlanner.encode(SegmentPlanner.normalize(it, startMs, endMs)) } != clip.segmentsJson
                 )
 
@@ -194,7 +207,12 @@ class ClipEditorViewModel(
         viewModelScope.launch {
             while (isActive) {
                 val st = _state.value
-                if (dragging == TrimMath.Handle.NONE && player.isPlaying && player.currentPosition >= st.endMs) {
+                val teaser = st.teaserRange
+                if (st.teaserPlaying && teaser != null && player.currentPosition >= teaser.second) {
+                    // Teaser done: cut to the real start, like the export does.
+                    player.seekTo(st.startMs)
+                    _state.update { it.copy(teaserPlaying = false) }
+                } else if (!st.teaserPlaying && dragging == TrimMath.Handle.NONE && player.isPlaying && player.currentPosition >= st.endMs) {
                     player.seekTo(st.startMs) // loop the clip
                 }
                 val pos = if (dragging == TrimMath.Handle.NONE) player.currentPosition else st.playheadMs
@@ -204,9 +222,13 @@ class ClipEditorViewModel(
                 val tk = st.textKey
                 if (tk != lastTextKey && st.clip != null) {
                     lastTextKey = tk
-                    previewText = TextConfig.forClip(
+                    previewText = if (st.teaserPlaying) {
+                        TextConfig.forClip(st.clip, st.startMs, st.endMs, st.cam, title = HookTeaser.LABEL, showTitle = true,
+                            style = st.titleStyle, showCaptions = false, watermark = st.watermark)
+                    } else TextConfig.forClip(
                         st.clip, st.startMs, st.endMs, st.cam, title = st.title, showTitle = st.showTitle,
                         style = st.titleStyle, showCaptions = st.showCaptions, words = st.captionWords, watermark = st.watermark,
+                        captionStyle = st.captionStyle,
                     ).takeIf { !it.isEmpty }
                 }
                 _state.update { it.copy(playheadMs = pos, isPlaying = player.isPlaying) }
@@ -232,6 +254,8 @@ class ClipEditorViewModel(
             showTitle = clip.showTitle, titleStyle = TitleStyle.of(clip.titleStyle), showCaptions = clip.showCaptions,
             titleOptions = decodeOptions(clip.titleOptions), captionWords = CaptionMath.decode(clip.captionsJson),
             captionStatus = clip.captionStatus, hashtags = clip.hashtags,
+            captionStyle = CaptionStyle.of(clip.captionStyle), hookTeaser = clip.hookTeaser, teaserStartMs = clip.teaserStartMs,
+            loudnessDb = sig?.loudnessDb.orEmpty(), loudnessWindowS = sig?.loudnessWindowS ?: 0.5,
             watermark = withContext(Dispatchers.IO) { com.clipforge.export.WatermarkStore(app).build((app as ClipForgeApp).container.settings.current()) },
         )
         // The captions job writes to this clip; pick up its fields without touching unsaved edits.
@@ -360,6 +384,21 @@ class ClipEditorViewModel(
         }
     }
 
+    fun setCaptionStyle(s: CaptionStyle) = _state.update { it.copy(captionStyle = s) }
+    fun setHookTeaser(v: Boolean) = _state.update { it.copy(hookTeaser = v) }
+
+    /** Teaser starts a little before the playhead, so the moment under the playhead is its payoff. */
+    fun setTeaserHere() = _state.update { it.copy(teaserStartMs = (it.playheadMs - HookTeaser.LEAD_MS).coerceAtLeast(it.startMs), hookTeaser = true) }
+    fun resetTeaser() = _state.update { it.copy(teaserStartMs = null) }
+
+    fun previewTeaser() {
+        val range = _state.value.teaserRange ?: return
+        _state.update { it.copy(teaserPlaying = true) }
+        player.setSeekParameters(SeekParameters.EXACT)
+        player.seekTo(range.first)
+        player.play()
+    }
+
     fun setShowTitle(v: Boolean) = _state.update { it.copy(showTitle = v) }
     fun setTitleStyle(s: TitleStyle) = _state.update { it.copy(titleStyle = s) }
     fun setShowCaptions(v: Boolean) = _state.update { it.copy(showCaptions = v) }
@@ -427,6 +466,7 @@ class ClipEditorViewModel(
                 segmentsJson = st.customSegments?.let { SegmentPlanner.encode(SegmentPlanner.normalize(it, st.startMs, st.endMs)) },
                 camLayout = st.camLayout.name, pipCorner = st.pipCorner.name,
                 showTitle = st.showTitle, titleStyle = st.titleStyle.name, showCaptions = st.showCaptions,
+                captionStyle = st.captionStyle.name, hookTeaser = st.hookTeaser, teaserStartMs = st.teaserStartMs,
             )
             clipDao.update(updated)
             _state.update { it.copy(clip = updated, title = updated.title) }

@@ -79,6 +79,17 @@ class ChatToolsTest {
         assertTrue(ov.changed.all { !it.showTitle && it.showCaptions })
     }
 
+    @Test fun captionStyleAndTeaserTools() {
+        val cs = ChatTools.execute("set_caption_style", obj("""{"clip":0,"style":"KARAOKE"}"""), st)
+        assertEquals(2, cs.changed.size); assertTrue(cs.changed.all { it.captionStyle == "KARAOKE" })
+        val short = st.copy(clips = listOf(clip(10, 1, 60_000, 64_000), clip(20, 2, 120_000, 145_000)))
+        val t = ChatTools.execute("set_hook_teaser", obj("""{"clip":0,"enabled":true}"""), short)
+        assertEquals(listOf(20L), t.changed.map { it.id }) // 4 s clip skipped
+        assertTrue(t.result.contains("Skipped 1"))
+        assertTrue(ChatTools.execute("set_hook_teaser", obj("""{"clip":1,"enabled":true}"""), short).isError)
+        assertFalse(ChatTools.execute("set_hook_teaser", obj("""{"clip":1,"enabled":false}"""), short).isError)
+    }
+
     @Test fun detailsAreReadOnly() {
         val o = ChatTools.execute("get_clip_details", obj("""{"clip":1}"""), st)
         assertTrue(o.changed.isEmpty()); assertTrue(o.result.contains("why 1")); assertTrue(o.result.contains("not transcribed"))
@@ -90,7 +101,7 @@ class ChatToolsTest {
     }
 
     @Test fun toolDefinitionsAreStrictAndClosed() {
-        assertEquals(8, ChatTools.DEFINITIONS.size)
+        assertEquals(10, ChatTools.DEFINITIONS.size)
         ChatTools.DEFINITIONS.forEach { t ->
             val o = t.jsonObject
             assertEquals("true", o["strict"]!!.jsonPrimitive.content)

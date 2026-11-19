@@ -92,6 +92,7 @@ fun ProjectScreen(
     val exportRun by vm.exportRun.collectAsStateWithLifecycle()
     val selection by vm.selection.collectAsStateWithLifecycle()
     val captionRun by vm.captionRun.collectAsStateWithLifecycle()
+    val autopilotRun by vm.autopilotRun.collectAsStateWithLifecycle()
     @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
     val camPreset by vm.camPreset.collectAsStateWithLifecycle()
     val context = LocalContext.current
@@ -184,7 +185,11 @@ fun ProjectScreen(
                                 onFindMoments = { showSheet = true },
                                 onCancel = vm::cancelAnalysis,
                                 onOpenSettings = onOpenSettings,
+                                onAutopilot = { vm.startAutopilot(analysis?.game.orEmpty(), reanalyze = false) },
                             )
+                        }
+                        autopilotRun?.takeIf { it.running || it.message != null }?.let { r ->
+                            item(key = "autopilot") { ExportCard(r, vm::cancelAutopilot, title = "Autopilot…") }
                         }
                         item(key = "facecam") {
                             FacecamCard(

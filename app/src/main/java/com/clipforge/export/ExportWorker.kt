@@ -36,23 +36,9 @@ class ExportWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx
         val projectId = inputData.getLong(KEY_PROJECT, -1)
         val ids = inputData.getLongArray(KEY_CLIPS)?.toList().orEmpty()
         if (projectId < 0 || ids.isEmpty()) return Result.failure()
-        val c = (applicationContext as ClipForgeApp).container
-        val project = c.database.projectDao().get(projectId) ?: return Result.failure(workDataOf(KEY_ERROR to "Project not found"))
-        val clips = c.database.clipDao().getAll(ids)
-        val signals = c.signals.read(projectId)
-        val cutsMs = signals?.cuts.orEmpty().map { (it * 1000).toLong() }
-        val specialMs = signals?.specialFrames.orEmpty().map { (it.tS * 1000).toLong() }
-        val fps = c.settings.current().exportFps
-        val watermark = WatermarkStore(applicationContext).build(c.settings.current())
-        val camRect = project.camPresetId?.let { c.database.camPresetDao().get(it) }?.let { NRect.fromCsv(it.rect) }
-        val exporter = ClipExporter(applicationContext)
-
         val progress = MutableStateFlow(P(0f, "Preparing"))
         runCatching { setForeground(foregroundInfo(progress.value)) }
-        val failures = ArrayList<String>()
-        var exported = 0
-
-        coroutineScope {
+        val outcome = coroutineScope {
             val reporter = launch {
                 var last: P? = null
                 while (isActive) {
@@ -66,31 +52,14 @@ class ExportWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx
                 }
             }
             try {
-                clips.forEachIndexed { i, clip ->
-                    val label = "Clip ${i + 1}/${clips.size}"
-                    progress.value = P(i.toFloat() / clips.size, label)
-                    try {
-                        val segs = exporter.resolveSegments(clip, cutsMs, specialMs)
-                        val layout = CamLayout.of(clip.camLayout)
-                        val cam = camRect?.takeIf { layout != CamLayout.NONE }?.let { CamSpec(it, layout, PipCorner.of(clip.pipCorner)) }
-                        val r = exporter.export(project, clip, segs, i + 1, fps, cam, watermark) { p ->
-                            progress.value = P((i + p) / clips.size, "$label · ${(p * 100).toInt()}%")
-                        }
-                        c.database.clipDao().markExported(clip.id, r.uri.toString(), System.currentTimeMillis())
-                        exported++
-                    } catch (e: CancellationException) {
-                        throw e
-                    } catch (e: Exception) {
-                        failures += "#${clip.rank} ${clip.title}: ${e.message ?: e::class.simpleName}"
-                    }
-                }
+                ExportPipeline(applicationContext).run(projectId, ids) { f, t -> progress.value = P(f, t) }
             } finally {
                 reporter.cancel()
             }
         }
-        notifyDone(exported, failures)
-        val out = workDataOf(KEY_EXPORTED to exported, KEY_ERROR to failures.joinToString("\n").ifBlank { null })
-        return if (exported == 0) Result.failure(out) else Result.success(out)
+        notifyDone(outcome.exported, outcome.failures)
+        val out = workDataOf(KEY_EXPORTED to outcome.exported, KEY_ERROR to outcome.failures.joinToString("\n").ifBlank { null })
+        return if (outcome.exported == 0) Result.failure(out) else Result.success(out)
     }
 
     override suspend fun getForegroundInfo(): ForegroundInfo = foregroundInfo(P(0f, "Preparing"))

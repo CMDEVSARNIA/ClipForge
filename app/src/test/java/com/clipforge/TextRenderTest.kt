@@ -78,6 +78,17 @@ class TextRenderTest {
         render("pip_br_banner", TitleStyle.BANNER, CamSpec(cam, CamLayout.PIP, PipCorner.BR), 13_200)
     }
 
+    @Test fun renderCaptionStyles() {
+        com.clipforge.export.CaptionStyle.entries.forEach { style ->
+            val cfg = TextConfig.forClip(clip, clip.startMs, clip.endMs, null, showTitle = false, words = words, captionStyle = style)
+            val overlay = TextRenderer(1080, 1920).render(cfg, 12_800) // "actually" is the spoken word
+            val out = background()
+            Canvas(out).drawBitmap(overlay, 0f, 0f, null)
+            File("build/text-render").mkdirs()
+            File("build/text-render/caption_${style.name.lowercase()}.png").outputStream().use { out.compress(Bitmap.CompressFormat.PNG, 100, it) }
+        }
+    }
+
     @Test fun renderWatermarks() {
         val logo = Bitmap.createBitmap(64, 64, Bitmap.Config.ARGB_8888).apply {
             val c = Canvas(this)

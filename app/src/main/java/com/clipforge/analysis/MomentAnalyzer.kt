@@ -165,6 +165,7 @@ class MomentAnalyzer(
 
             // 8. Persist
             val entities = toEntities(projectId, a.id, snapped, ranking, samples, db)
+                .map { it.copy(captionStyle = s.defaultCaptionStyle, hookTeaser = s.defaultHookTeaser) }
             clips.replaceForProject(projectId, entities)
             a = a.copy(
                 status = "DONE",
