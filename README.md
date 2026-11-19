@@ -8,6 +8,13 @@ Worker so the Anthropic API key never ships inside the APK.
 
 ## What works now
 
+### Watermark (Settings → Watermark)
+
+- Your **@handle** and/or a **logo** (any image; PNG transparency is kept), burned into every export and shown in the editor's 9:16 preview.
+- **Position:** top left, top right, bottom left, or **Moving**, which hops to the next corner every 4 s so a single crop can't remove it. Plus **size** (S/M/L) and **opacity** (20–100%).
+- **Safe placement:** corners sit clear of TikTok/Shorts UI (top bar, caption area, right button rail). Titles shift down below a top watermark, and a corner covered by a PiP cam box is skipped.
+- A watermark credits you and makes reposting more work; it can't prevent it.
+
 ### Phase 6: assistant & share
 
 - **Assistant** (project screen → *Assistant*): a chat scoped to the project that edits clips through **tool use**: `trim_clip`, `set_clip_range`, `set_crop`, `set_layout`, `set_title`, `set_hashtags`, `set_overlays`, `get_clip_details`. Ask things like "make clip 2 shorter", "punchier titles for the top 3", or "Split on every clip".

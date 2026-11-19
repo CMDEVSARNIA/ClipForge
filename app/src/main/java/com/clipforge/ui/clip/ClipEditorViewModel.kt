@@ -107,9 +107,11 @@ class ClipEditorViewModel(
         val captionWords: List<CaptionWord> = emptyList(),
         val captionStatus: String = "NONE",
         val hashtags: String = "",
+        /** From Settings; applies to every export. */
+        val watermark: com.clipforge.export.Watermark? = null,
     ) {
         /** Inputs of the text overlay; a new value means the preview must redraw. */
-        val textKey: Any get() = listOf(title, showTitle, titleStyle, showCaptions, captionWords, startMs, endMs, cam)
+        val textKey: Any get() = listOf(title, showTitle, titleStyle, showCaptions, captionWords, startMs, endMs, cam, watermark)
 
         val cam: CamSpec? get() = camRect?.takeIf { camLayout != CamLayout.NONE }?.let { CamSpec(it, camLayout, pipCorner) }
 
@@ -204,7 +206,7 @@ class ClipEditorViewModel(
                     lastTextKey = tk
                     previewText = TextConfig.forClip(
                         st.clip, st.startMs, st.endMs, st.cam, title = st.title, showTitle = st.showTitle,
-                        style = st.titleStyle, showCaptions = st.showCaptions, words = st.captionWords,
+                        style = st.titleStyle, showCaptions = st.showCaptions, words = st.captionWords, watermark = st.watermark,
                     ).takeIf { !it.isEmpty }
                 }
                 _state.update { it.copy(playheadMs = pos, isPlaying = player.isPlaying) }
@@ -230,6 +232,7 @@ class ClipEditorViewModel(
             showTitle = clip.showTitle, titleStyle = TitleStyle.of(clip.titleStyle), showCaptions = clip.showCaptions,
             titleOptions = decodeOptions(clip.titleOptions), captionWords = CaptionMath.decode(clip.captionsJson),
             captionStatus = clip.captionStatus, hashtags = clip.hashtags,
+            watermark = withContext(Dispatchers.IO) { com.clipforge.export.WatermarkStore(app).build((app as ClipForgeApp).container.settings.current()) },
         )
         // The captions job writes to this clip; pick up its fields without touching unsaved edits.
         viewModelScope.launch {

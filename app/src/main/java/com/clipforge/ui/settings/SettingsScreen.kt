@@ -1,6 +1,12 @@
 package com.clipforge.ui.settings
 
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.background
+import androidx.compose.foundation.horizontalScroll
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.asImageBitmap
+import com.clipforge.export.WatermarkPosition
+import com.clipforge.export.WatermarkSize
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
@@ -123,6 +129,10 @@ fun SettingsScreen(onBack: () -> Unit, vm: SettingsViewModel = viewModel(factory
                 Text("60 fps keeps gameplay smooth; a 30 fps source stays at 30.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
 
+            Section("Watermark") {
+                WatermarkSettings(st, vm)
+            }
+
             Section("Speech captions") {
                 Text("Captions are transcribed on your phone with whisper.cpp; audio never leaves the device. Claude only sees the text, to polish it.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 SpeechModel.entries.forEach { m ->
@@ -205,4 +215,62 @@ private fun ModelField(label: String, value: String, onChange: (String) -> Unit,
         }
         Spacer(Modifier.height(4.dp))
     }
+}
+
+@Composable
+private fun WatermarkSettings(st: SettingsViewModel.UiState, vm: SettingsViewModel) {
+    val pickLogo = androidx.activity.compose.rememberLauncherForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia(),
+    ) { uri -> uri?.let(vm::setWmLogo) }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Column(Modifier.weight(1f)) {
+            Text("Add a watermark to exports", style = MaterialTheme.typography.bodyLarge)
+            Text(
+                "Credits you when clips get reposted. Moving mode hops between corners, so one crop can't remove it.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+        Switch(checked = st.wmEnabled, onCheckedChange = vm::setWmEnabled)
+    }
+    if (!st.wmEnabled) return
+    Row(horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+        // Live preview, drawn by the same renderer the export uses.
+        androidx.compose.foundation.layout.Box(
+            Modifier.size(width = 108.dp, height = 192.dp)
+                .clip(androidx.compose.foundation.shape.RoundedCornerShape(12.dp))
+                .background(androidx.compose.ui.graphics.Brush.verticalGradient(listOf(androidx.compose.ui.graphics.Color(0xFF3A7BD5), androidx.compose.ui.graphics.Color(0xFF1B3D1C)))),
+        ) {
+            st.wmPreview?.let { androidx.compose.foundation.Image(it.asImageBitmap(), null, Modifier.matchParentSize()) }
+        }
+        Column(Modifier.weight(1f), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            OutlinedTextField(
+                value = st.wmText, onValueChange = vm::setWmText, label = { Text("Text") },
+                placeholder = { Text("@yourhandle") }, singleLine = true, modifier = Modifier.fillMaxWidth(),
+            )
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                OutlinedButton(onClick = {
+                    pickLogo.launch(androidx.activity.result.PickVisualMediaRequest(androidx.activity.result.contract.ActivityResultContracts.PickVisualMedia.ImageOnly))
+                }) { Text(if (st.wmHasLogo) "Change logo" else "Add logo") }
+                if (st.wmHasLogo) androidx.compose.material3.TextButton(onClick = vm::clearWmLogo) { Text("Remove") }
+            }
+        }
+    }
+    Text("Position", style = MaterialTheme.typography.labelLarge)
+    Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+        WatermarkPosition.entries.forEach { p -> FilterChip(selected = st.wmPosition == p, onClick = { vm.setWmPosition(p) }, label = { Text(p.label) }) }
+    }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text("Size", style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
+        WatermarkSize.entries.forEach { s -> FilterChip(selected = st.wmSize == s, onClick = { vm.setWmSize(s) }, label = { Text(s.label) }, modifier = Modifier.padding(start = 6.dp)) }
+    }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text("Opacity ${(st.wmOpacity * 100).toInt()}%", style = MaterialTheme.typography.labelLarge, modifier = Modifier.size(width = 110.dp, height = 20.dp))
+        androidx.compose.material3.Slider(value = st.wmOpacity, onValueChange = vm::setWmOpacity, valueRange = 0.2f..1f, modifier = Modifier.weight(1f))
+    }
+    Text(
+        "Placed clear of TikTok's buttons and captions; titles move down to make room. Shown in the editor's 9:16 preview and burned into every export.",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
 }

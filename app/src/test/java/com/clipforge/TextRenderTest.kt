@@ -52,8 +52,12 @@ class TextRenderTest {
         return b
     }
 
-    private fun render(name: String, style: TitleStyle, cam: CamSpec?, tMs: Long) {
-        val cfg = TextConfig.forClip(clip, clip.startMs, clip.endMs, cam, style = style, words = words)
+    private fun render(name: String, style: TitleStyle, cam: CamSpec?, tMs: Long, wm: com.clipforge.export.Watermark? = null) {
+        val cfg = TextConfig.forClip(clip, clip.startMs, clip.endMs, cam, style = style, words = words, watermark = wm)
+        if (wm != null) {
+            val reserve = com.clipforge.export.WatermarkPlacement.topReserve(wm.size)
+            assertTrue("title below watermark", cfg.titleBox.t >= reserve)
+        }
         val overlay = TextRenderer(1080, 1920).render(cfg, tMs)
         var painted = 0
         for (y in 0 until 1920 step 8) for (x in 0 until 1080 step 8) if (Color.alpha(overlay.getPixel(x, y)) > 0) painted++
@@ -72,5 +76,19 @@ class TextRenderTest {
         render("split_punch", TitleStyle.PUNCH, CamSpec(cam, CamLayout.SPLIT), 12_300)
         render("pip_tr_pop", TitleStyle.POP, CamSpec(cam, CamLayout.PIP, PipCorner.TR), 12_800)
         render("pip_br_banner", TitleStyle.BANNER, CamSpec(cam, CamLayout.PIP, PipCorner.BR), 13_200)
+    }
+
+    @Test fun renderWatermarks() {
+        val logo = Bitmap.createBitmap(64, 64, Bitmap.Config.ARGB_8888).apply {
+            val c = Canvas(this)
+            c.drawCircle(32f, 32f, 30f, Paint(Paint.ANTI_ALIAS_FLAG).apply { color = 0xFFFE624C.toInt() })
+        }
+        fun wm(pos: com.clipforge.export.WatermarkPosition, size: com.clipforge.export.WatermarkSize = com.clipforge.export.WatermarkSize.M, withLogo: Boolean = true) =
+            com.clipforge.export.Watermark("@clipforge.gg", if (withLogo) logo else null, pos, 0.8f, size)
+        val cam = NRect(0.75f, 0.65f, 0.98f, 0.97f)
+        render("wm_tl", TitleStyle.PUNCH, null, 12_300, wm(com.clipforge.export.WatermarkPosition.TL))
+        render("wm_moving_t4", TitleStyle.PUNCH, null, 4_100, wm(com.clipforge.export.WatermarkPosition.MOVING)) // TR slot
+        render("wm_moving_t8", TitleStyle.BANNER, null, 8_500, wm(com.clipforge.export.WatermarkPosition.MOVING, com.clipforge.export.WatermarkSize.L)) // BL slot (8-12 s)
+        render("wm_pip_tr", TitleStyle.POP, CamSpec(cam, CamLayout.PIP, PipCorner.TR), 12_800, wm(com.clipforge.export.WatermarkPosition.TR, withLogo = false))
     }
 }

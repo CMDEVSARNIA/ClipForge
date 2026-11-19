@@ -73,6 +73,7 @@ class ClipExporter(private val context: Context) {
         fileIndex: Int,
         targetFps: Int,
         cam: CamSpec?,
+        watermark: Watermark?,
         onProgress: (Float) -> Unit,
     ): Result {
         val warnings = ArrayList<String>()
@@ -85,7 +86,7 @@ class ClipExporter(private val context: Context) {
 
         val fps = ExportMath.outputFps(project.frameRate, targetFps)
         val enc = ExportMath.encodeSettings(fps)
-        val text = TextConfig.forClip(clip, clip.startMs, endMs, cam).takeIf { !it.isEmpty }
+        val text = TextConfig.forClip(clip, clip.startMs, endMs, cam, watermark = watermark).takeIf { !it.isEmpty }
         val items = segs.mapIndexed { i, s -> buildItem(source, s, cam, text, i == 0, i == segs.lastIndex, project.frameRate, fps, project.hasAudio) }
 
         val tmp = File(context.cacheDir, "export/${clip.id}_${System.currentTimeMillis()}.mp4").also { it.parentFile?.mkdirs() }

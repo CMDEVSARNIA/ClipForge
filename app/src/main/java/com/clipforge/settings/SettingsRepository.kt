@@ -27,6 +27,12 @@ data class AppSettings(
     val speechModel: String,
     /** "auto" or an ISO code like "en". */
     val captionLanguage: String,
+    val watermarkEnabled: Boolean = false,
+    /** e.g. "@yourhandle" */
+    val watermarkText: String = "",
+    val watermarkPosition: String = "MOVING",
+    val watermarkOpacity: Float = 0.7f,
+    val watermarkSize: String = "M",
 ) {
     val isConnected: Boolean get() = workerUrl.isNotBlank() && appToken.isNotBlank()
 
@@ -47,6 +53,11 @@ class SettingsRepository(private val context: Context) {
         val exportFps = androidx.datastore.preferences.core.intPreferencesKey("export_fps")
         val speechModel = stringPreferencesKey("speech_model")
         val captionLanguage = stringPreferencesKey("caption_language")
+        val wmEnabled = booleanPreferencesKey("wm_enabled")
+        val wmText = stringPreferencesKey("wm_text")
+        val wmPosition = stringPreferencesKey("wm_position")
+        val wmOpacity = androidx.datastore.preferences.core.floatPreferencesKey("wm_opacity")
+        val wmSize = stringPreferencesKey("wm_size")
     }
 
     val settings: Flow<AppSettings> = context.dataStore.data.map { p ->
@@ -59,6 +70,11 @@ class SettingsRepository(private val context: Context) {
             exportFps = p[Keys.exportFps] ?: 60,
             speechModel = p[Keys.speechModel] ?: "TINY",
             captionLanguage = p[Keys.captionLanguage] ?: "auto",
+            watermarkEnabled = p[Keys.wmEnabled] ?: false,
+            watermarkText = p[Keys.wmText].orEmpty(),
+            watermarkPosition = p[Keys.wmPosition] ?: "MOVING",
+            watermarkOpacity = p[Keys.wmOpacity] ?: 0.7f,
+            watermarkSize = p[Keys.wmSize] ?: "M",
         )
     }
 
@@ -88,6 +104,16 @@ class SettingsRepository(private val context: Context) {
 
     suspend fun setSpeechModel(m: String) = context.dataStore.edit { it[Keys.speechModel] = m }
     suspend fun setCaptionLanguage(l: String) = context.dataStore.edit { it[Keys.captionLanguage] = l }
+
+    suspend fun setWatermark(
+        enabled: Boolean? = null, text: String? = null, position: String? = null, opacity: Float? = null, size: String? = null,
+    ) = context.dataStore.edit { p ->
+        enabled?.let { p[Keys.wmEnabled] = it }
+        text?.let { p[Keys.wmText] = it.take(40) }
+        position?.let { p[Keys.wmPosition] = it }
+        opacity?.let { p[Keys.wmOpacity] = it.coerceIn(0.2f, 1f) }
+        size?.let { p[Keys.wmSize] = it }
+    }
 
     suspend fun setExportFps(fps: Int) = context.dataStore.edit { it[Keys.exportFps] = if (fps > 30) 60 else 30 }
 }

@@ -7,6 +7,14 @@ import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.clipforge.ClipForgeApp
 import com.clipforge.captions.SpeechModel
+import com.clipforge.export.SafeZones
+import com.clipforge.export.TextConfig
+import com.clipforge.export.TextRenderer
+import com.clipforge.export.TitleStyle
+import com.clipforge.export.Watermark
+import com.clipforge.export.WatermarkPosition
+import com.clipforge.export.WatermarkSize
+import com.clipforge.export.WatermarkStore
 import com.clipforge.captions.SpeechModelStore
 import com.clipforge.net.WorkerClient
 import com.clipforge.net.WorkerException
@@ -23,6 +31,7 @@ class SettingsViewModel(
     private val repo: SettingsRepository,
     private val worker: WorkerClient,
     private val models: SpeechModelStore,
+    private val watermarks: WatermarkStore,
 ) : ViewModel() {
 
     data class UiState(
@@ -45,6 +54,13 @@ class SettingsViewModel(
         val modelReady: Map<SpeechModel, Boolean> = emptyMap(),
         val modelDownload: Float? = null,
         val modelError: String? = null,
+        val wmEnabled: Boolean = false,
+        val wmText: String = "",
+        val wmPosition: WatermarkPosition = WatermarkPosition.MOVING,
+        val wmOpacity: Float = 0.7f,
+        val wmSize: WatermarkSize = WatermarkSize.M,
+        val wmHasLogo: Boolean = false,
+        val wmPreview: android.graphics.Bitmap? = null,
     )
 
     private val _state = MutableStateFlow(UiState())
@@ -59,8 +75,11 @@ class SettingsViewModel(
                     analysisModel = s.analysisModel, writingModel = s.writingModel, useTrends = s.useTrends, exportFps = s.exportFps,
                     speechModel = SpeechModel.of(s.speechModel), captionLanguage = s.captionLanguage,
                     modelReady = SpeechModel.entries.associateWith { m -> models.isReady(m) },
+                    wmEnabled = s.watermarkEnabled, wmText = s.watermarkText, wmPosition = WatermarkPosition.of(s.watermarkPosition),
+                    wmOpacity = s.watermarkOpacity, wmSize = WatermarkSize.of(s.watermarkSize), wmHasLogo = watermarks.hasLogo(),
                 )
             }
+            renderPreview()
             if (s.isConnected) refreshHealth(s.workerUrl)
         }
     }
@@ -73,6 +92,41 @@ class SettingsViewModel(
     fun setUseTrends(v: Boolean) {
         _state.update { it.copy(useTrends = v) }
         viewModelScope.launch { repo.setUseTrends(v) }
+    }
+
+    // ---- watermark ----
+
+    private var logo: android.graphics.Bitmap? = watermarks.loadLogo()
+
+    private fun renderPreview() {
+        val st = _state.value
+        val wm = if (st.wmText.isBlank() && logo == null) null else Watermark(
+            st.wmText.ifBlank { "" }, logo, if (st.wmPosition == WatermarkPosition.MOVING) WatermarkPosition.TL else st.wmPosition, st.wmOpacity, st.wmSize,
+        )
+        val cfg = wm?.let { TextConfig(null, TitleStyle.PUNCH, emptyList(), SafeZones.titleBox(null, null), SafeZones.captionBox(null, null), it) }
+        _state.update { it.copy(wmPreview = TextRenderer(360, 640).render(cfg, 0)) }
+    }
+
+    fun setWmEnabled(v: Boolean) { _state.update { it.copy(wmEnabled = v) }; viewModelScope.launch { repo.setWatermark(enabled = v) } }
+    fun setWmText(v: String) { _state.update { it.copy(wmText = v.take(40)) }; renderPreview(); viewModelScope.launch { repo.setWatermark(text = v) } }
+    fun setWmPosition(v: WatermarkPosition) { _state.update { it.copy(wmPosition = v) }; renderPreview(); viewModelScope.launch { repo.setWatermark(position = v.name) } }
+    fun setWmOpacity(v: Float) { _state.update { it.copy(wmOpacity = v) }; renderPreview(); viewModelScope.launch { repo.setWatermark(opacity = v) } }
+    fun setWmSize(v: WatermarkSize) { _state.update { it.copy(wmSize = v) }; renderPreview(); viewModelScope.launch { repo.setWatermark(size = v.name) } }
+
+    fun setWmLogo(uri: android.net.Uri) {
+        viewModelScope.launch {
+            if (watermarks.saveLogo(uri)) {
+                logo = watermarks.loadLogo()
+                _state.update { it.copy(wmHasLogo = true) }
+                renderPreview()
+            }
+        }
+    }
+
+    fun clearWmLogo() {
+        watermarks.clearLogo(); logo = null
+        _state.update { it.copy(wmHasLogo = false) }
+        renderPreview()
     }
 
     fun setSpeechModel(m: SpeechModel) {
@@ -172,7 +226,7 @@ class SettingsViewModel(
         val Factory = viewModelFactory {
             initializer {
                 val app = this[APPLICATION_KEY] as ClipForgeApp
-                SettingsViewModel(app.container.settings, app.container.worker, SpeechModelStore(app))
+                SettingsViewModel(app.container.settings, app.container.worker, SpeechModelStore(app), WatermarkStore(app))
             }
         }
     }

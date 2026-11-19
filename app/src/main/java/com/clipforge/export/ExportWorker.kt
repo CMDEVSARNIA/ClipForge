@@ -43,6 +43,7 @@ class ExportWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx
         val cutsMs = signals?.cuts.orEmpty().map { (it * 1000).toLong() }
         val specialMs = signals?.specialFrames.orEmpty().map { (it.tS * 1000).toLong() }
         val fps = c.settings.current().exportFps
+        val watermark = WatermarkStore(applicationContext).build(c.settings.current())
         val camRect = project.camPresetId?.let { c.database.camPresetDao().get(it) }?.let { NRect.fromCsv(it.rect) }
         val exporter = ClipExporter(applicationContext)
 
@@ -72,7 +73,7 @@ class ExportWorker(ctx: Context, params: WorkerParameters) : CoroutineWorker(ctx
                         val segs = exporter.resolveSegments(clip, cutsMs, specialMs)
                         val layout = CamLayout.of(clip.camLayout)
                         val cam = camRect?.takeIf { layout != CamLayout.NONE }?.let { CamSpec(it, layout, PipCorner.of(clip.pipCorner)) }
-                        val r = exporter.export(project, clip, segs, i + 1, fps, cam) { p ->
+                        val r = exporter.export(project, clip, segs, i + 1, fps, cam, watermark) { p ->
                             progress.value = P((i + p) / clips.size, "$label · ${(p * 100).toInt()}%")
                         }
                         c.database.clipDao().markExported(clip.id, r.uri.toString(), System.currentTimeMillis())

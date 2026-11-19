@@ -27,6 +27,15 @@ enum class TitleStyle(val label: String) {
     }
 }
 
+/** Creator watermark: a handle and/or logo, kept in a safe corner (or hopping between them). */
+data class Watermark(
+    val text: String,
+    val logo: Bitmap?,
+    val position: WatermarkPosition,
+    val opacity: Float,
+    val size: WatermarkSize,
+)
+
 /** Everything drawn on top of the video for one clip. Boxes are in 1080×1920 space. */
 data class TextConfig(
     val title: String?,
@@ -34,21 +43,34 @@ data class TextConfig(
     val phrases: List<CaptionPhrase>,
     val titleBox: Box,
     val captionBox: Box,
+    val watermark: Watermark? = null,
+    val cam: CamSpec? = null,
+    val pip: NRect? = null,
 ) {
-    val isEmpty: Boolean get() = title.isNullOrBlank() && phrases.isEmpty()
+    val isEmpty: Boolean get() = title.isNullOrBlank() && phrases.isEmpty() && watermark == null
 
     companion object {
         fun forClip(clip: ClipEntity, startMs: Long, endMs: Long, cam: CamSpec?, title: String = clip.title,
                     showTitle: Boolean = clip.showTitle, style: TitleStyle = TitleStyle.of(clip.titleStyle),
-                    showCaptions: Boolean = clip.showCaptions, words: List<CaptionWord> = CaptionMath.decode(clip.captionsJson)): TextConfig {
+                    showCaptions: Boolean = clip.showCaptions, words: List<CaptionWord> = CaptionMath.decode(clip.captionsJson),
+                    watermark: Watermark? = null): TextConfig {
             val pip = SafeZones.pipRect(cam)
             val inClip = if (showCaptions) words.filter { it.endMs > startMs && it.startMs < endMs } else emptyList()
+            var titleBox = SafeZones.titleBox(cam, pip)
+            // A top-corner watermark could sit above the title: start the title below it.
+            if (watermark != null) {
+                val reserve = WatermarkPlacement.topReserve(watermark.size)
+                if (titleBox.t < reserve) titleBox = titleBox.copy(t = reserve)
+            }
             return TextConfig(
                 title = title.takeIf { showTitle && it.isNotBlank() },
                 titleStyle = style,
                 phrases = CaptionMath.chunk(inClip),
-                titleBox = SafeZones.titleBox(cam, pip),
+                titleBox = titleBox,
                 captionBox = SafeZones.captionBox(cam, pip),
+                watermark = watermark,
+                cam = cam,
+                pip = pip,
             )
         }
     }
@@ -65,7 +87,8 @@ class TextRenderer(private val outW: Int, private val outH: Int) {
     fun render(cfg: TextConfig?, tMs: Long): Bitmap {
         val bmp = bitmap ?: Bitmap.createBitmap(outW, outH, Bitmap.Config.ARGB_8888).also { bitmap = it }
         val active = cfg?.let { CaptionMath.activeAt(it.phrases, tMs) }
-        val key = Pair(System.identityHashCode(cfg), active)
+        val corner = cfg?.watermark?.let { WatermarkPlacement.cornerAt(it.position, cfg.cam, cfg.pip, tMs) }
+        val key = Triple(System.identityHashCode(cfg), active, corner)
         if (key == lastKey) return bmp
         lastKey = key
         bmp.eraseColor(Color.TRANSPARENT) // also bumps the generation id → overlay re-uploads
@@ -74,7 +97,31 @@ class TextRenderer(private val outW: Int, private val outH: Int) {
         c.scale(outW / SafeZones.W, outH / SafeZones.H)
         cfg.title?.let { drawTitle(c, it, cfg.titleStyle, cfg.titleBox) }
         active?.let { (pi, wi) -> drawCaption(c, cfg.phrases[pi], wi, cfg.captionBox) }
+        if (cfg.watermark != null && corner != null) drawWatermark(c, cfg.watermark, corner)
         return bmp
+    }
+
+    private fun drawWatermark(c: Canvas, wm: Watermark, corner: WatermarkPosition) {
+        val h = wm.size.heightPx
+        val paint = TextPaint(Paint.ANTI_ALIAS_FLAG).apply {
+            typeface = heavy
+            textSize = h * 0.62f
+            color = Color.WHITE
+            setShadowLayer(6f, 0f, 2f, 0xAA000000.toInt())
+        }
+        val text = wm.text.trim()
+        val logoW = wm.logo?.let { h * it.width / it.height.coerceAtLeast(1) } ?: 0f
+        val gap = if (logoW > 0 && text.isNotEmpty()) h * 0.22f else 0f
+        val textW = if (text.isNotEmpty()) paint.measureText(text) else 0f
+        val box = WatermarkPlacement.boxFor(corner, logoW + gap + textW, h)
+        val layer = c.saveLayerAlpha(box.l - 8, box.t - 8, box.r + 8, box.b + 8, (wm.opacity.coerceIn(0.1f, 1f) * 255).toInt())
+        wm.logo?.let { c.drawBitmap(it, null, RectF(box.l, box.t, box.l + logoW, box.b), Paint(Paint.FILTER_BITMAP_FLAG or Paint.ANTI_ALIAS_FLAG)) }
+        if (text.isNotEmpty()) {
+            val baseline = box.t + h / 2f - (paint.descent() + paint.ascent()) / 2f
+            outline(paint, 0x99000000.toInt(), h * 0.07f); c.drawText(text, box.l + logoW + gap, baseline, paint)
+            paint.style = Paint.Style.FILL; paint.color = Color.WHITE; c.drawText(text, box.l + logoW + gap, baseline, paint)
+        }
+        c.restoreToCount(layer)
     }
 
     private fun titleLayoutFor(text: String, style: TitleStyle, box: Box): StaticLayout {
