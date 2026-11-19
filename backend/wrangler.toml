@@ -26,7 +26,7 @@ simple = { limit = 5, period = 60 }
 # Create with:  npx wrangler kv namespace create CLIPFORGE_KV   and paste the id below.
 [[kv_namespaces]]
 binding = "KV"
-id = "REPLACE_WITH_YOUR_KV_NAMESPACE_ID"
+id = "29b35c8755d84b98aedc035255d87b67"
 
 # Secrets (never in this file):
 #   npx wrangler secret put ANTHROPIC_API_KEY
