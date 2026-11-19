@@ -227,7 +227,8 @@ fun ClipRow(
     Surface(
         onClick = if (selected != null) onToggle else onClick,
         shape = RoundedCornerShape(14.dp),
-        color = if (selected == true) MaterialTheme.colorScheme.primaryContainer.copy(alpha = 0.45f) else MaterialTheme.colorScheme.surfaceContainer,
+        color = if (selected == true) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainer,
+        contentColor = MaterialTheme.colorScheme.onSurface,
         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 5.dp),
     ) {
         Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -292,7 +293,8 @@ fun MomentsHeader(count: Int, selection: Set<Long>?, onSelect: () -> Unit, onSel
     Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
         Text(
             if (selection == null) "$count moments, best first" else "${selection.size} selected",
-            style = MaterialTheme.typography.labelLarge,
+            style = MaterialTheme.typography.titleMedium,
+            color = MaterialTheme.colorScheme.onBackground,
             modifier = Modifier.weight(1f),
         )
         if (selection == null) {

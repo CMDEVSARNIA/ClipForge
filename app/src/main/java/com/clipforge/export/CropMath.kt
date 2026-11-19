@@ -43,7 +43,7 @@ data class Layer(val src: NRect, val dst: NRect, val cornerRadiusPx: Float = 0f)
  */
 data class LayoutSpec(val background: NRect?, val bgDim: Float, val layers: List<Layer>)
 
-enum class CamLayout(val label: String) { NONE("Gameplay only"), SPLIT("Split"), PIP("Picture-in-picture");
+enum class CamLayout(val label: String) { NONE("Gameplay only"), SPLIT("Split"), PIP("PiP");
     companion object { fun of(name: String?) = entries.firstOrNull { it.name == name } ?: NONE }
 }
 

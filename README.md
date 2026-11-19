@@ -59,6 +59,22 @@ How the layouts render: `export/LayoutEffect.kt` is a custom Media3 `GlEffect`. 
 - Filmstrip timeline: tap to jump, drag to scrub. **Fine scrub:** while dragging, move your finger up away from the strip to slow down (¼×, 1/20×, 1/100×), so you can land on an exact moment in a 60-minute file.
 - Source info: duration, resolution (rotation-aware), frame rate, codec, bitrate, audio track, file size, plus warnings (> 60 min, no audio, non-persistent access).
 
+## Design
+
+Dark-only, built from the logo:
+
+| Token | Color | Use |
+|---|---|---|
+| Coral | `#FE624C` | The single accent: primary actions, playhead, trim handles, selection |
+| Ink | `#2E2D3D` | Highest surface; text on coral (dark ink on coral ≈ 5:1 contrast, white would be ≈ 3:1) |
+| Night | `#111117` → `#24232F` | Background → cards → raised surfaces (ink-tinted, not flat grey) |
+| Snow / Mist | `#F3F3F6` / `#A6A5B6` | Primary / secondary text |
+
+- **Type:** [Outfit](https://fonts.google.com/specimen/Outfit) (SIL OFL 1.1, license in `app/src/main/assets/licenses/`), the closest open match to the wordmark. One variable font file covers weights 400–800.
+- **Icon:** the logo mark traced from the brand artwork with potrace into vector drawables. Adaptive launcher icon (white background, as in the logo), monochrome themed icon, and a light mark for in-app use.
+- **Layout:** home is a thumbnail grid. The clip editor pins the player and splits its tools into **Trim · Frame · Text · Export** tabs. One coral primary action per screen.
+- **Screenshots:** `ScreenshotTest` renders real screens with Robolectric into `app/build/screenshots/`.
+
 ## Requirements
 
 | Tool | Version |
