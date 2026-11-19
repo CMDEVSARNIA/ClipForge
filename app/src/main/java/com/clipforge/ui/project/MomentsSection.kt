@@ -64,6 +64,7 @@ import com.clipforge.settings.AppSettings
 import com.clipforge.ui.components.TierBadge
 import com.clipforge.util.TimeFormat
 import com.clipforge.util.ShareClips
+import kotlinx.coroutines.launch
 import java.util.Locale
 
 fun usd(v: Double): String = when {
@@ -257,7 +258,12 @@ fun ClipRow(
                     Text(clip.title, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f))
                     if (clip.exportedAt != null && selected == null) {
                         val ctx = LocalContext.current
-                        androidx.compose.material3.IconButton(onClick = { ShareClips.share(ctx, clip, ShareClips.Target.ANY) }, modifier = Modifier.size(28.dp)) {
+                        val scope = androidx.compose.runtime.rememberCoroutineScope()
+                        androidx.compose.material3.IconButton(onClick = {
+                            val r = ShareClips.share(ctx, clip, ShareClips.Target.ANY)
+                            if (r !is ShareClips.Result.Opened) android.widget.Toast.makeText(ctx, ShareClips.message(r), android.widget.Toast.LENGTH_LONG).show()
+                            scope.launch { ShareClips.rememberRecovered(ctx, clip, r) }
+                        }, modifier = Modifier.size(28.dp)) {
                             Icon(painterResource(R.drawable.ic_share), "Share", Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
                         }
                     }

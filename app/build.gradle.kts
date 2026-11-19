@@ -15,8 +15,8 @@ android {
         applicationId = "com.clipforge"
         minSdk = 26
         targetSdk = 36
-        versionCode = 7
-        versionName = "0.7.0"
+        versionCode = 8
+        versionName = "0.7.1"
 
         ndk {
             // 64-bit phones + emulators. Add "armeabi-v7a" for old 32-bit devices.

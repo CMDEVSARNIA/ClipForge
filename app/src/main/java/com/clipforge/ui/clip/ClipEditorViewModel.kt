@@ -242,7 +242,7 @@ class ClipEditorViewModel(
                     it.copy(
                         titleOptions = decodeOptions(c.titleOptions), captionWords = CaptionMath.decode(c.captionsJson),
                         captionStatus = c.captionStatus, hashtags = c.hashtags,
-                        clip = it.clip?.copy(titleOptions = c.titleOptions, captionsJson = c.captionsJson, captionStatus = c.captionStatus, hashtags = c.hashtags, exportedAt = c.exportedAt),
+                        clip = it.clip?.copy(titleOptions = c.titleOptions, captionsJson = c.captionsJson, captionStatus = c.captionStatus, hashtags = c.hashtags, exportedAt = c.exportedAt, exportedUri = c.exportedUri),
                     )
                 }
             }
@@ -417,7 +417,10 @@ class ClipEditorViewModel(
         val st = _state.value
         val c = st.clip ?: return
         viewModelScope.launch {
-            val updated = c.copy(
+            // Start from the database row, not the editor's copy: other parts of the app (export,
+            // captions, assistant) write fields the editor doesn't own, and a stale copy would erase them.
+            val fresh = clipDao.get(c.id) ?: c
+            val updated = fresh.copy(
                 startMs = st.startMs, endMs = st.endMs, title = st.title.trim().ifBlank { c.title },
                 edited = c.edited || st.startMs != c.startMs || st.endMs != c.endMs || st.title != c.title,
                 cropMode = st.cropMode.name, panX = st.panX, zoomRect = st.zoomRect?.toCsv(),

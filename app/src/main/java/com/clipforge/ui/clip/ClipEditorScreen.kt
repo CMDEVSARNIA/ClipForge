@@ -22,6 +22,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import com.clipforge.data.db.ClipEntity
 import com.clipforge.util.ShareClips
+import kotlinx.coroutines.launch
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -300,12 +301,11 @@ private fun ClipPlayer(vm: ClipEditorViewModel, modifier: Modifier, isPlaying: B
 fun ShareRow(clip: ClipEntity) {
     val context = LocalContext.current
     var message by remember { mutableStateOf<String?>(null) }
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
     fun go(t: ShareClips.Target) {
-        message = when (ShareClips.share(context, clip, t)) {
-            ShareClips.Result.Opened -> "Caption copied: paste it into the post."
-            ShareClips.Result.FileMissing -> "The exported file is gone from your gallery. Export again."
-            ShareClips.Result.NotExported -> "Export the clip first."
-        }
+        val r = ShareClips.share(context, clip, t)
+        message = ShareClips.message(r)
+        scope.launch { ShareClips.rememberRecovered(context, clip, r) }
     }
     Column(horizontalAlignment = Alignment.CenterHorizontally, modifier = Modifier.fillMaxWidth()) {
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
