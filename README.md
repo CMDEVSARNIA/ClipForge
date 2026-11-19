@@ -4,9 +4,19 @@ Android app that turns long gameplay recordings into vertical (9:16) TikTok / Yo
 Claude picks the moments and writes titles, and every Claude call goes through a small Cloudflare
 Worker so the Anthropic API key never ships inside the APK.
 
-> **Status: Phase 4 of 6: webcam layouts.** See [Roadmap](#roadmap).
+> **Status: Phase 5 of 6: titles & speech captions.** See [Roadmap](#roadmap).
 
 ## What works now
+
+### Phase 5: titles & speech captions
+
+- **Title overlay** (editable; Claude suggests 3 options per clip) in 3 bold styles: **Punch** (white, heavy outline, caps), **Banner** (white on an orange block), **Pop** (yellow, thick outline, slight tilt). Text auto-shrinks to fit at most 3 lines.
+- **Speech captions on the device:** whisper.cpp v1.9.5 through JNI (`app/src/main/cpp`). The model (tiny ≈31 MB or base ≈57 MB, q5_1) downloads on first use from Hugging Face and is SHA-256 verified. You get word timestamps and word-by-word highlighted captions (2–3 words per phrase; breaks at punctuation and pauses). Audio never leaves the phone.
+- **No speech, no captions:** low-confidence output, a high no-speech probability, `[Music]`/♪ tokens and classic whisper hallucinations ("Thank you.") are rejected, and the clip is marked "No speech".
+- **Claude polish** (writing model): fixes misheard game terms and punctuation index by index, so word timings survive. It also writes 3 title options and 5 hashtags, even when there's no speech.
+- **Safe zones:** text stays clear of the platform UI (top 8%, bottom 20%, the right-hand button rail). Titles sit on the seam in Split and move below a top PiP; captions move above a bottom PiP.
+- The overlay runs in the live 9:16 preview and the export (Media3 `OverlayEffect`; the bitmap redraws only when the highlighted word changes).
+- Run it per clip in the editor, or batch via "Select → Captions & titles".
 
 ### Phase 4: webcam layouts
 
@@ -54,13 +64,25 @@ How the layouts render: `export/LayoutEffect.kt` is a custom Media3 `GlEffect`. 
 | Tool | Version |
 |---|---|
 | JDK | 17 or newer (built with 21) |
-| Android SDK | Platform 37 (`compileSdk`), build-tools 37 |
+| Android SDK | Platform 37 (`compileSdk`), build-tools 37, NDK 29.0.14206865, CMake 3.31.6 |
 | Gradle | wrapper included (9.9.1) |
 | Device | Android 8.0 (API 26) or newer |
 
 Main libraries: AGP 9.5, Kotlin 2.4 (AGP built-in Kotlin), Compose BOM 2026.09 / Material 3, Media3 1.11, Room 2.8 (KSP), Navigation 2.10 (type-safe routes).
 
 ## Build the APK
+
+whisper.cpp is a **git submodule**. Clone with submodules (or init them afterwards):
+
+```bash
+git clone --recurse-submodules <repo-url>
+# or, in an existing clone:
+git submodule update --init --recursive
+```
+
+The native part needs the **Android NDK 29.0.14206865** and **CMake 3.31.6**. Android Studio offers to install them, or run
+`sdkmanager "ndk;29.0.14206865" "cmake;3.31.6"`. Native code is always compiled optimized, even in debug builds,
+because whisper in a debug build is far too slow. ABIs: `arm64-v8a`, `x86_64` (add `armeabi-v7a` in `app/build.gradle.kts` for old 32-bit phones).
 
 ```bash
 # Point Gradle at your SDK (or create local.properties with sdk.dir=...)
@@ -109,6 +131,10 @@ app/src/main/java/com/clipforge/
                            Transformer exporter, batch ExportWorker
   ui/clip/                 Trim + framing + layout editor
   ui/cam/                  Facecam preset setup
+  captions/                whisper JNI wrapper, model download, PCM extraction, speech filter,
+                           phrasing, Claude polish + titles, CaptionWorker
+app/src/main/cpp/          CMake + JNI bridge + shared transcription core (whisper.cpp submodule)
+tools/whisper_host_test.cpp  Runs the same transcription core on a desktop
   ui/settings/             Settings screen
 backend/                   Cloudflare Worker (TypeScript): auth, proxy, budget, trends
 ```
@@ -122,7 +148,7 @@ downscaled immediately (≤192 px, LRU-capped at 4 MB). Long files never load fu
 2. ✅ Moment finding: frame sampling, loudness and scene cuts, Claude via the Worker, trend-aware ranking, cost estimate, trim editor
 3. ✅ Vertical edit & export (Media3 Transformer, 1080×1920 H.264/AAC, crop modes per segment, WorkManager)
 4. ✅ Webcam layouts (facecam presets, split / PiP)
-5. Titles & captions (on-device whisper.cpp, word-highlight captions, Claude-polished text)
+5. ✅ Titles & captions (on-device whisper.cpp, word-highlight captions, Claude-polished text)
 6. In-app assistant with tool use + share sheet
 
 ## Cloudflare Worker (required for Claude features)
@@ -195,3 +221,20 @@ These are estimates. Thinking tokens vary. The card on each project shows what a
 
 Sampled frames (512 px JPEGs) and timing data go to your Worker and then to the Anthropic API. The full video never leaves the phone.
 Frames are cached in the app's cache directory during analysis and deleted when it finishes.
+
+## Testing captions on a desktop
+
+`tools/whisper_host_test.cpp` runs the app's exact transcription code (`app/src/main/cpp/whisper_core.cpp`) on Linux or macOS:
+
+```bash
+W=app/src/main/cpp/whisper.cpp
+cmake -S $W -B /tmp/w -DCMAKE_BUILD_TYPE=Release -DBUILD_SHARED_LIBS=OFF -DWHISPER_BUILD_EXAMPLES=OFF -DWHISPER_BUILD_TESTS=OFF -DGGML_OPENMP=OFF -DGGML_NATIVE=OFF
+cmake --build /tmp/w -j --target whisper
+g++ -O2 -std=c++17 -Iapp/src/main/cpp -I$W/include -I$W/ggml/include app/src/main/cpp/whisper_core.cpp tools/whisper_host_test.cpp \
+  -o /tmp/host_test $(find /tmp/w -name libwhisper.a) $(find /tmp/w -name 'libggml*.a' | sort -r) -lpthread -ldl
+curl -L -o /tmp/tiny.bin https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-tiny-q5_1.bin
+/tmp/host_test /tmp/tiny.bin $W/samples/jfk.wav      # prints word-level JSON
+```
+
+The unit test `CaptionMathTest` uses that JFK output as a fixture. `TextRenderTest` (Robolectric, native graphics) renders the
+title styles and captions to `app/build/text-render/*.png` with the platform-UI zones marked in red.

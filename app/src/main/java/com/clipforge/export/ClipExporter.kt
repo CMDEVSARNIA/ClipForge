@@ -19,6 +19,7 @@ import androidx.media3.common.audio.AudioProcessor
 import androidx.media3.common.audio.SonicAudioProcessor
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.effect.FrameDropEffect
+import androidx.media3.effect.OverlayEffect
 import androidx.media3.transformer.AudioEncoderSettings
 import androidx.media3.transformer.Composition
 import androidx.media3.transformer.DefaultEncoderFactory
@@ -84,7 +85,8 @@ class ClipExporter(private val context: Context) {
 
         val fps = ExportMath.outputFps(project.frameRate, targetFps)
         val enc = ExportMath.encodeSettings(fps)
-        val items = segs.mapIndexed { i, s -> buildItem(source, s, cam, i == 0, i == segs.lastIndex, project.frameRate, fps, project.hasAudio) }
+        val text = TextConfig.forClip(clip, clip.startMs, endMs, cam).takeIf { !it.isEmpty }
+        val items = segs.mapIndexed { i, s -> buildItem(source, s, cam, text, i == 0, i == segs.lastIndex, project.frameRate, fps, project.hasAudio) }
 
         val tmp = File(context.cacheDir, "export/${clip.id}_${System.currentTimeMillis()}.mp4").also { it.parentFile?.mkdirs() }
         val fixed = File(tmp.path.removeSuffix(".mp4") + "_fs.mp4")
@@ -107,6 +109,7 @@ class ClipExporter(private val context: Context) {
         source: Uri,
         seg: Segment,
         cam: CamSpec?,
+        text: TextConfig?,
         first: Boolean,
         last: Boolean,
         sourceFps: Float,
@@ -125,6 +128,10 @@ class ClipExporter(private val context: Context) {
         val video = ArrayList<Effect>()
         if (sourceFps > fps + 0.5f) video += FrameDropEffect.createDefaultFrameDropEffect(fps.toFloat())
         video += LayoutEffect.constant(CropMath.OUT_W, CropMath.OUT_H, seg.request(cam))
+        if (text != null) {
+            val clock = SegmentClock(seg.startMs)
+            video += OverlayEffect(listOf(TextBitmapOverlay(CropMath.OUT_W, CropMath.OUT_H, { text }, clock::toSourceMs)))
+        }
 
         val audio = ArrayList<AudioProcessor>()
         if (hasAudio) {

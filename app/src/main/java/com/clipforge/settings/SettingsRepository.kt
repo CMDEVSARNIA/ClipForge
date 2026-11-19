@@ -23,6 +23,10 @@ data class AppSettings(
     val useTrends: Boolean,
     /** Max output frame rate (30 or 60); never above the source. */
     val exportFps: Int,
+    /** whisper model: TINY or BASE. */
+    val speechModel: String,
+    /** "auto" or an ISO code like "en". */
+    val captionLanguage: String,
 ) {
     val isConnected: Boolean get() = workerUrl.isNotBlank() && appToken.isNotBlank()
 
@@ -41,6 +45,8 @@ class SettingsRepository(private val context: Context) {
         val writingModel = stringPreferencesKey("writing_model")
         val useTrends = booleanPreferencesKey("use_trends")
         val exportFps = androidx.datastore.preferences.core.intPreferencesKey("export_fps")
+        val speechModel = stringPreferencesKey("speech_model")
+        val captionLanguage = stringPreferencesKey("caption_language")
     }
 
     val settings: Flow<AppSettings> = context.dataStore.data.map { p ->
@@ -51,6 +57,8 @@ class SettingsRepository(private val context: Context) {
             writingModel = p[Keys.writingModel] ?: AppSettings.DEFAULT_WRITING_MODEL,
             useTrends = p[Keys.useTrends] ?: true,
             exportFps = p[Keys.exportFps] ?: 60,
+            speechModel = p[Keys.speechModel] ?: "TINY",
+            captionLanguage = p[Keys.captionLanguage] ?: "auto",
         )
     }
 
@@ -77,6 +85,9 @@ class SettingsRepository(private val context: Context) {
     }
 
     suspend fun setUseTrends(enabled: Boolean) = context.dataStore.edit { it[Keys.useTrends] = enabled }
+
+    suspend fun setSpeechModel(m: String) = context.dataStore.edit { it[Keys.speechModel] = m }
+    suspend fun setCaptionLanguage(l: String) = context.dataStore.edit { it[Keys.captionLanguage] = l }
 
     suspend fun setExportFps(fps: Int) = context.dataStore.edit { it[Keys.exportFps] = if (fps > 30) 60 else 30 }
 }

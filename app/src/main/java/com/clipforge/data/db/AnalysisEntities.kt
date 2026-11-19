@@ -83,6 +83,17 @@ data class ClipEntity(
     /** NONE (gameplay only), SPLIT or PIP; needs the project's facecam preset. */
     @ColumnInfo(defaultValue = "NONE") val camLayout: String = "NONE",
     @ColumnInfo(defaultValue = "TR") val pipCorner: String = "TR",
+    /** Title overlay on the video (text = [title]). */
+    @ColumnInfo(defaultValue = "1") val showTitle: Boolean = true,
+    @ColumnInfo(defaultValue = "PUNCH") val titleStyle: String = "PUNCH",
+    /** JSON array of Claude's title options. */
+    val titleOptions: String? = null,
+    /** JSON list of CaptionWord (absolute source ms), or null if none. */
+    val captionsJson: String? = null,
+    /** NONE, READY, NO_SPEECH, NO_AUDIO, FAILED */
+    @ColumnInfo(defaultValue = "NONE") val captionStatus: String = "NONE",
+    @ColumnInfo(defaultValue = "1") val showCaptions: Boolean = true,
+    val captionLang: String? = null,
 ) {
     val lengthMs: Long get() = endMs - startMs
 }
@@ -100,6 +111,9 @@ interface AnalysisDao {
 
     @Query("SELECT * FROM analyses WHERE projectId = :projectId ORDER BY createdAt DESC LIMIT 1")
     fun observeLatest(projectId: Long): Flow<AnalysisEntity?>
+
+    @Query("SELECT * FROM analyses WHERE projectId = :projectId ORDER BY createdAt DESC LIMIT 1")
+    suspend fun latest(projectId: Long): AnalysisEntity?
 
     @Query("UPDATE analyses SET status = 'FAILED', error = 'Interrupted', finishedAt = :now WHERE status = 'RUNNING' AND projectId = :projectId")
     suspend fun markStaleRunsFailed(projectId: Long, now: Long)

@@ -28,6 +28,16 @@ import com.clipforge.data.db.ProjectEntity
 import com.clipforge.export.CamLayout
 import com.clipforge.export.CamSpec
 import com.clipforge.export.CropMath
+import com.clipforge.export.TextBitmapOverlay
+import com.clipforge.export.TextConfig
+import com.clipforge.export.TitleStyle
+import com.clipforge.captions.CaptionMath
+import com.clipforge.captions.CaptionWord
+import com.clipforge.captions.CaptionWorker
+import androidx.media3.effect.OverlayEffect
+import kotlinx.serialization.builtins.ListSerializer
+import kotlinx.serialization.builtins.serializer
+import kotlinx.serialization.json.Json
 import com.clipforge.export.PipCorner
 import com.clipforge.data.db.CamPresetDao
 import com.clipforge.export.CropMode
@@ -89,7 +99,18 @@ class ClipEditorViewModel(
         val camRect: NRect? = null,
         val camLayout: CamLayout = CamLayout.NONE,
         val pipCorner: PipCorner = PipCorner.TR,
+        val showTitle: Boolean = true,
+        val titleStyle: TitleStyle = TitleStyle.PUNCH,
+        val showCaptions: Boolean = true,
+        // Written by the captions job (refreshed live from the database):
+        val titleOptions: List<String> = emptyList(),
+        val captionWords: List<CaptionWord> = emptyList(),
+        val captionStatus: String = "NONE",
+        val hashtags: String = "",
     ) {
+        /** Inputs of the text overlay; a new value means the preview must redraw. */
+        val textKey: Any get() = listOf(title, showTitle, titleStyle, showCaptions, captionWords, startMs, endMs, cam)
+
         val cam: CamSpec? get() = camRect?.takeIf { camLayout != CamLayout.NONE }?.let { CamSpec(it, camLayout, pipCorner) }
 
         val lengthMs: Long get() = endMs - startMs
@@ -107,6 +128,7 @@ class ClipEditorViewModel(
                 startMs != clip.startMs || endMs != clip.endMs || title != clip.title ||
                     cropMode.name != clip.cropMode || panX != clip.panX || zoomRect?.toCsv() != clip.zoomRect ||
                     camLayout.name != clip.camLayout || pipCorner.name != clip.pipCorner ||
+                    showTitle != clip.showTitle || titleStyle.name != clip.titleStyle || showCaptions != clip.showCaptions ||
                     customSegments?.let { SegmentPlanner.encode(SegmentPlanner.normalize(it, startMs, endMs)) } != clip.segmentsJson
                 )
 
@@ -118,6 +140,22 @@ class ClipEditorViewModel(
 
     /** Read by the GL thread every frame for the live 9:16 preview. */
     @Volatile private var previewRequest = LayoutRequest(CropMode.CENTER)
+    @Volatile private var previewText: TextConfig? = null
+    @Volatile private var previewPosMs: Long = 0
+    private var lastTextKey: Any? = null
+
+    private fun previewEffects() = listOf(
+        LayoutEffect(PREVIEW_W, PREVIEW_H) { previewRequest },
+        OverlayEffect(listOf(TextBitmapOverlay(PREVIEW_W, PREVIEW_H, { previewText }, { previewPosMs }))),
+    )
+
+    val captionRun: StateFlow<String?> = WorkManager.getInstance(app)
+        .getWorkInfosByTagFlow(CaptionWorker.TAG)
+        .map { infos ->
+            val running = infos.firstOrNull { it.state == WorkInfo.State.RUNNING || it.state == WorkInfo.State.ENQUEUED }
+            running?.progress?.getString(CaptionWorker.KEY_STEP) ?: running?.let { "Queued" }
+        }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
 
     private val _state = MutableStateFlow(State())
     val state: StateFlow<State> = _state.asStateFlow()
@@ -160,6 +198,15 @@ class ClipEditorViewModel(
                 val pos = if (dragging == TrimMath.Handle.NONE) player.currentPosition else st.playheadMs
                 val segs = st.segments
                 if (segs.isNotEmpty()) previewRequest = segs[SegmentPlanner.indexAt(segs, pos)].request(st.cam)
+                previewPosMs = pos
+                val tk = st.textKey
+                if (tk != lastTextKey && st.clip != null) {
+                    lastTextKey = tk
+                    previewText = TextConfig.forClip(
+                        st.clip, st.startMs, st.endMs, st.cam, title = st.title, showTitle = st.showTitle,
+                        style = st.titleStyle, showCaptions = st.showCaptions, words = st.captionWords,
+                    ).takeIf { !it.isEmpty }
+                }
                 _state.update { it.copy(playheadMs = pos, isPlaying = player.isPlaying) }
                 delay(if (player.isPlaying) 33 else 150)
             }
@@ -180,9 +227,25 @@ class ClipEditorViewModel(
             cropMode = CropMode.of(clip.cropMode), panX = clip.panX, zoomRect = NRect.fromCsv(clip.zoomRect),
             customSegments = SegmentPlanner.decode(clip.segmentsJson),
             camRect = camRect, camLayout = CamLayout.of(clip.camLayout), pipCorner = PipCorner.of(clip.pipCorner),
+            showTitle = clip.showTitle, titleStyle = TitleStyle.of(clip.titleStyle), showCaptions = clip.showCaptions,
+            titleOptions = decodeOptions(clip.titleOptions), captionWords = CaptionMath.decode(clip.captionsJson),
+            captionStatus = clip.captionStatus, hashtags = clip.hashtags,
         )
+        // The captions job writes to this clip; pick up its fields without touching unsaved edits.
+        viewModelScope.launch {
+            clipDao.observe(clipId).collect { c ->
+                if (c == null) return@collect
+                _state.update {
+                    it.copy(
+                        titleOptions = decodeOptions(c.titleOptions), captionWords = CaptionMath.decode(c.captionsJson),
+                        captionStatus = c.captionStatus, hashtags = c.hashtags,
+                        clip = it.clip?.copy(titleOptions = c.titleOptions, captionsJson = c.captionsJson, captionStatus = c.captionStatus, hashtags = c.hashtags, exportedAt = c.exportedAt),
+                    )
+                }
+            }
+        }
         // Effects must be set before prepare(); they can be swapped afterwards.
-        player.setVideoEffects(listOf(LayoutEffect(PREVIEW_W, PREVIEW_H) { previewRequest }))
+        player.setVideoEffects(previewEffects())
         player.setMediaItem(MediaItem.fromUri(project.sourceUri.toUri()))
         player.setSeekParameters(SeekParameters.EXACT)
         player.prepare()
@@ -277,7 +340,7 @@ class ClipEditorViewModel(
     fun togglePreview916() {
         val on = !_state.value.preview916
         _state.update { it.copy(preview916 = on, previewError = null) }
-        player.setVideoEffects(if (on) listOf(LayoutEffect(PREVIEW_W, PREVIEW_H) { previewRequest }) else emptyList())
+        player.setVideoEffects(if (on) previewEffects() else emptyList())
     }
 
     /**
@@ -293,6 +356,18 @@ class ClipEditorViewModel(
             else -> st.copy(cropMode = mode, zoomRect = st.zoomRect ?: if (mode == CropMode.ZOOM_FIT) CropMath.defaultZoomRect() else null)
         }
     }
+
+    fun setShowTitle(v: Boolean) = _state.update { it.copy(showTitle = v) }
+    fun setTitleStyle(s: TitleStyle) = _state.update { it.copy(titleStyle = s) }
+    fun setShowCaptions(v: Boolean) = _state.update { it.copy(showCaptions = v) }
+
+    fun generateCaptions() {
+        val c = _state.value.clip ?: return
+        save { CaptionWorker.enqueue(app, c.projectId, listOf(c.id)) }
+    }
+
+    private fun decodeOptions(s: String?): List<String> =
+        s?.let { runCatching { Json.decodeFromString(ListSerializer(String.serializer()), it) }.getOrNull() }.orEmpty()
 
     fun setCamLayout(l: CamLayout) = _state.update { it.copy(camLayout = l) }
     fun setPipCorner(c: PipCorner) = _state.update { it.copy(pipCorner = c, camLayout = CamLayout.PIP) }
@@ -345,6 +420,7 @@ class ClipEditorViewModel(
                 cropMode = st.cropMode.name, panX = st.panX, zoomRect = st.zoomRect?.toCsv(),
                 segmentsJson = st.customSegments?.let { SegmentPlanner.encode(SegmentPlanner.normalize(it, st.startMs, st.endMs)) },
                 camLayout = st.camLayout.name, pipCorner = st.pipCorner.name,
+                showTitle = st.showTitle, titleStyle = st.titleStyle.name, showCaptions = st.showCaptions,
             )
             clipDao.update(updated)
             _state.update { it.copy(clip = updated, title = updated.title) }

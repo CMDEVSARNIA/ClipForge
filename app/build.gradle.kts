@@ -9,13 +9,19 @@ plugins {
 android {
     namespace = "com.clipforge"
     compileSdk = 37
+    ndkVersion = "29.0.14206865"
 
     defaultConfig {
         applicationId = "com.clipforge"
         minSdk = 26
         targetSdk = 36
-        versionCode = 4
-        versionName = "0.4.0-phase4"
+        versionCode = 5
+        versionName = "0.5.0-phase5"
+
+        ndk {
+            // 64-bit phones + emulators. Add "armeabi-v7a" for old 32-bit devices.
+            abiFilters += listOf("arm64-v8a", "x86_64")
+        }
     }
 
     signingConfigs {
@@ -46,6 +52,13 @@ android {
         targetCompatibility = JavaVersion.VERSION_17
     }
 
+    externalNativeBuild {
+        cmake {
+            path = file("src/main/cpp/CMakeLists.txt")
+            version = "3.31.6"
+        }
+    }
+
     buildFeatures {
         compose = true
         buildConfig = true
@@ -53,6 +66,7 @@ android {
 
     testOptions {
         unitTests.isReturnDefaultValues = true
+        unitTests.isIncludeAndroidResources = true
     }
 }
 
@@ -92,4 +106,5 @@ dependencies {
 
     testImplementation(libs.junit)
     testImplementation(libs.kotlinx.coroutines.test)
+    testImplementation(libs.robolectric)
 }

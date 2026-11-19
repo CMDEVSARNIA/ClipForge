@@ -1,0 +1,570 @@
+{
+  "formatVersion": 1,
+  "database": {
+    "version": 5,
+    "identityHash": "8a5e77b46e4900a30d9b1e214c000687",
+    "entities": [
+      {
+        "tableName": "projects",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `sourceUri` TEXT NOT NULL, `displayName` TEXT NOT NULL, `durationMs` INTEGER NOT NULL, `width` INTEGER NOT NULL, `height` INTEGER NOT NULL, `rotationDegrees` INTEGER NOT NULL, `frameRate` REAL NOT NULL, `bitrate` INTEGER, `videoMime` TEXT, `hasAudio` INTEGER NOT NULL, `sizeBytes` INTEGER, `persistedPermission` INTEGER NOT NULL, `createdAt` INTEGER NOT NULL, `updatedAt` INTEGER NOT NULL, `camPresetId` INTEGER)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sourceUri",
+            "columnName": "sourceUri",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "displayName",
+            "columnName": "displayName",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "durationMs",
+            "columnName": "durationMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "width",
+            "columnName": "width",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "height",
+            "columnName": "height",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "rotationDegrees",
+            "columnName": "rotationDegrees",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "frameRate",
+            "columnName": "frameRate",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "bitrate",
+            "columnName": "bitrate",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "videoMime",
+            "columnName": "videoMime",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "hasAudio",
+            "columnName": "hasAudio",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sizeBytes",
+            "columnName": "sizeBytes",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "persistedPermission",
+            "columnName": "persistedPermission",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "createdAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "updatedAt",
+            "columnName": "updatedAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "camPresetId",
+            "columnName": "camPresetId",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_projects_sourceUri",
+            "unique": true,
+            "columnNames": [
+              "sourceUri"
+            ],
+            "orders": [],
+            "createSql": "CREATE UNIQUE INDEX IF NOT EXISTS `index_projects_sourceUri` ON `${TABLE_NAME}` (`sourceUri`)"
+          }
+        ]
+      },
+      {
+        "tableName": "analyses",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `projectId` INTEGER NOT NULL, `status` TEXT NOT NULL, `game` TEXT, `gameDetected` INTEGER NOT NULL, `trendSource` TEXT, `trendNote` TEXT, `trendSummary` TEXT, `analysisModel` TEXT NOT NULL, `rankModel` TEXT NOT NULL, `estimatedCostUsd` REAL NOT NULL, `actualCostUsd` REAL NOT NULL, `framesSampled` INTEGER NOT NULL, `batchesFailed` INTEGER NOT NULL, `warning` TEXT, `error` TEXT, `createdAt` INTEGER NOT NULL, `finishedAt` INTEGER, FOREIGN KEY(`projectId`) REFERENCES `projects`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "projectId",
+            "columnName": "projectId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "status",
+            "columnName": "status",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "game",
+            "columnName": "game",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "gameDetected",
+            "columnName": "gameDetected",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "trendSource",
+            "columnName": "trendSource",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "trendNote",
+            "columnName": "trendNote",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "trendSummary",
+            "columnName": "trendSummary",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "analysisModel",
+            "columnName": "analysisModel",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "rankModel",
+            "columnName": "rankModel",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "estimatedCostUsd",
+            "columnName": "estimatedCostUsd",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "actualCostUsd",
+            "columnName": "actualCostUsd",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "framesSampled",
+            "columnName": "framesSampled",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "batchesFailed",
+            "columnName": "batchesFailed",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "warning",
+            "columnName": "warning",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "error",
+            "columnName": "error",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "createdAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "finishedAt",
+            "columnName": "finishedAt",
+            "affinity": "INTEGER"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_analyses_projectId",
+            "unique": false,
+            "columnNames": [
+              "projectId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_analyses_projectId` ON `${TABLE_NAME}` (`projectId`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "projects",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "projectId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "clips",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `projectId` INTEGER NOT NULL, `analysisId` INTEGER NOT NULL, `rank` INTEGER NOT NULL, `tier` TEXT NOT NULL, `score` INTEGER NOT NULL, `startMs` INTEGER NOT NULL, `endMs` INTEGER NOT NULL, `suggestedStartMs` INTEGER NOT NULL, `suggestedEndMs` INTEGER NOT NULL, `title` TEXT NOT NULL, `hashtags` TEXT NOT NULL, `why` TEXT NOT NULL, `firstPassNote` TEXT NOT NULL, `hook` INTEGER, `payoff` INTEGER, `clarity` INTEGER, `emotion` INTEGER, `trendFit` INTEGER, `loudnessAboveMedianDb` REAL NOT NULL, `thumbMs` INTEGER NOT NULL, `edited` INTEGER NOT NULL, `cropMode` TEXT NOT NULL DEFAULT 'AUTO', `panX` REAL NOT NULL DEFAULT 0, `zoomRect` TEXT, `segmentsJson` TEXT, `exportedUri` TEXT, `exportedAt` INTEGER, `camLayout` TEXT NOT NULL DEFAULT 'NONE', `pipCorner` TEXT NOT NULL DEFAULT 'TR', `showTitle` INTEGER NOT NULL DEFAULT 1, `titleStyle` TEXT NOT NULL DEFAULT 'PUNCH', `titleOptions` TEXT, `captionsJson` TEXT, `captionStatus` TEXT NOT NULL DEFAULT 'NONE', `showCaptions` INTEGER NOT NULL DEFAULT 1, `captionLang` TEXT, FOREIGN KEY(`projectId`) REFERENCES `projects`(`id`) ON UPDATE NO ACTION ON DELETE CASCADE )",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "projectId",
+            "columnName": "projectId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "analysisId",
+            "columnName": "analysisId",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "rank",
+            "columnName": "rank",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "tier",
+            "columnName": "tier",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "score",
+            "columnName": "score",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "startMs",
+            "columnName": "startMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "endMs",
+            "columnName": "endMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "suggestedStartMs",
+            "columnName": "suggestedStartMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "suggestedEndMs",
+            "columnName": "suggestedEndMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "title",
+            "columnName": "title",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "hashtags",
+            "columnName": "hashtags",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "why",
+            "columnName": "why",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "firstPassNote",
+            "columnName": "firstPassNote",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "hook",
+            "columnName": "hook",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "payoff",
+            "columnName": "payoff",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "clarity",
+            "columnName": "clarity",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "emotion",
+            "columnName": "emotion",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "trendFit",
+            "columnName": "trendFit",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "loudnessAboveMedianDb",
+            "columnName": "loudnessAboveMedianDb",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "thumbMs",
+            "columnName": "thumbMs",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "edited",
+            "columnName": "edited",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "cropMode",
+            "columnName": "cropMode",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "'AUTO'"
+          },
+          {
+            "fieldPath": "panX",
+            "columnName": "panX",
+            "affinity": "REAL",
+            "notNull": true,
+            "defaultValue": "0"
+          },
+          {
+            "fieldPath": "zoomRect",
+            "columnName": "zoomRect",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "segmentsJson",
+            "columnName": "segmentsJson",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "exportedUri",
+            "columnName": "exportedUri",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "exportedAt",
+            "columnName": "exportedAt",
+            "affinity": "INTEGER"
+          },
+          {
+            "fieldPath": "camLayout",
+            "columnName": "camLayout",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "'NONE'"
+          },
+          {
+            "fieldPath": "pipCorner",
+            "columnName": "pipCorner",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "'TR'"
+          },
+          {
+            "fieldPath": "showTitle",
+            "columnName": "showTitle",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "1"
+          },
+          {
+            "fieldPath": "titleStyle",
+            "columnName": "titleStyle",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "'PUNCH'"
+          },
+          {
+            "fieldPath": "titleOptions",
+            "columnName": "titleOptions",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "captionsJson",
+            "columnName": "captionsJson",
+            "affinity": "TEXT"
+          },
+          {
+            "fieldPath": "captionStatus",
+            "columnName": "captionStatus",
+            "affinity": "TEXT",
+            "notNull": true,
+            "defaultValue": "'NONE'"
+          },
+          {
+            "fieldPath": "showCaptions",
+            "columnName": "showCaptions",
+            "affinity": "INTEGER",
+            "notNull": true,
+            "defaultValue": "1"
+          },
+          {
+            "fieldPath": "captionLang",
+            "columnName": "captionLang",
+            "affinity": "TEXT"
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        },
+        "indices": [
+          {
+            "name": "index_clips_projectId",
+            "unique": false,
+            "columnNames": [
+              "projectId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_clips_projectId` ON `${TABLE_NAME}` (`projectId`)"
+          },
+          {
+            "name": "index_clips_analysisId",
+            "unique": false,
+            "columnNames": [
+              "analysisId"
+            ],
+            "orders": [],
+            "createSql": "CREATE INDEX IF NOT EXISTS `index_clips_analysisId` ON `${TABLE_NAME}` (`analysisId`)"
+          }
+        ],
+        "foreignKeys": [
+          {
+            "table": "projects",
+            "onDelete": "CASCADE",
+            "onUpdate": "NO ACTION",
+            "columns": [
+              "projectId"
+            ],
+            "referencedColumns": [
+              "id"
+            ]
+          }
+        ]
+      },
+      {
+        "tableName": "cam_presets",
+        "createSql": "CREATE TABLE IF NOT EXISTS `${TABLE_NAME}` (`id` INTEGER PRIMARY KEY AUTOINCREMENT NOT NULL, `name` TEXT NOT NULL, `rect` TEXT NOT NULL, `sourceAspect` REAL NOT NULL, `createdAt` INTEGER NOT NULL)",
+        "fields": [
+          {
+            "fieldPath": "id",
+            "columnName": "id",
+            "affinity": "INTEGER",
+            "notNull": true
+          },
+          {
+            "fieldPath": "name",
+            "columnName": "name",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "rect",
+            "columnName": "rect",
+            "affinity": "TEXT",
+            "notNull": true
+          },
+          {
+            "fieldPath": "sourceAspect",
+            "columnName": "sourceAspect",
+            "affinity": "REAL",
+            "notNull": true
+          },
+          {
+            "fieldPath": "createdAt",
+            "columnName": "createdAt",
+            "affinity": "INTEGER",
+            "notNull": true
+          }
+        ],
+        "primaryKey": {
+          "autoGenerate": true,
+          "columnNames": [
+            "id"
+          ]
+        }
+      }
+    ],
+    "setupQueries": [
+      "CREATE TABLE IF NOT EXISTS room_master_table (id INTEGER PRIMARY KEY,identity_hash TEXT)",
+      "INSERT OR REPLACE INTO room_master_table (id,identity_hash) VALUES(42, '8a5e77b46e4900a30d9b1e214c000687')"
+    ]
+  }
+}

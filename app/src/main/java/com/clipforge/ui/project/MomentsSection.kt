@@ -266,7 +266,7 @@ fun ClipRow(
 }
 
 @Composable
-fun ExportCard(run: ProjectViewModel.ExportRun, onCancel: () -> Unit) {
+fun ExportCard(run: ProjectViewModel.ExportRun, onCancel: () -> Unit, title: String = "Exporting…") {
     Surface(
         shape = RoundedCornerShape(16.dp),
         color = MaterialTheme.colorScheme.surfaceContainer,
@@ -274,7 +274,7 @@ fun ExportCard(run: ProjectViewModel.ExportRun, onCancel: () -> Unit) {
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
             if (run.running) {
-                Text("Exporting…", style = MaterialTheme.typography.titleMedium)
+                Text(title, style = MaterialTheme.typography.titleMedium)
                 LinearProgressIndicator(progress = { run.fraction }, modifier = Modifier.fillMaxWidth())
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(run.step, style = MaterialTheme.typography.bodySmall, modifier = Modifier.weight(1f))

@@ -37,6 +37,7 @@ import androidx.work.WorkInfo
 import androidx.work.WorkManager
 import com.clipforge.analysis.AnalysisWorker
 import com.clipforge.export.ExportWorker
+import com.clipforge.captions.CaptionWorker
 import com.clipforge.analysis.CostEstimator
 import com.clipforge.data.db.AnalysisDao
 import com.clipforge.data.db.AnalysisEntity
@@ -147,6 +148,36 @@ class ProjectViewModel(
     }
 
     fun cancelExport() = ExportWorker.cancel(app, projectId)
+
+    /** Captions & titles job for this project (same card shape as export). */
+    val captionRun: StateFlow<ExportRun?> = WorkManager.getInstance(app)
+        .getWorkInfosForUniqueWorkFlow(CaptionWorker.uniqueName(projectId))
+        .map { infos ->
+            val info = infos.lastOrNull() ?: return@map null
+            val running = info.state == WorkInfo.State.RUNNING || info.state == WorkInfo.State.ENQUEUED || info.state == WorkInfo.State.BLOCKED
+            val err = info.outputData.getString(CaptionWorker.KEY_ERROR)
+            ExportRun(
+                running = running,
+                fraction = info.progress.getFloat(CaptionWorker.KEY_FRACTION, 0f),
+                step = info.progress.getString(CaptionWorker.KEY_STEP) ?: if (running) "Queued" else "",
+                message = when (info.state) {
+                    WorkInfo.State.SUCCEEDED -> "Captions & titles updated." + (err?.let { "\n$it" } ?: "")
+                    WorkInfo.State.FAILED -> "Captions failed: ${err ?: "unknown error"}"
+                    WorkInfo.State.CANCELLED -> "Captions cancelled."
+                    else -> null
+                },
+            )
+        }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
+    fun captionSelected() {
+        val ids = _selection.value ?: return
+        if (ids.isEmpty()) return
+        CaptionWorker.enqueue(app, projectId, clips.value.filter { it.id in ids }.map { it.id })
+        _selection.value = null
+    }
+
+    fun cancelCaptions() = CaptionWorker.cancel(app, projectId)
 
     // ---- facecam ----
 

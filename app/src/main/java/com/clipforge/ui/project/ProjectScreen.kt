@@ -13,6 +13,7 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.material3.Button
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.ui.platform.LocalContext
 import androidx.core.content.ContextCompat
 import androidx.compose.foundation.lazy.LazyColumn
@@ -88,6 +89,7 @@ fun ProjectScreen(
     val settings by vm.settings.collectAsStateWithLifecycle()
     val exportRun by vm.exportRun.collectAsStateWithLifecycle()
     val selection by vm.selection.collectAsStateWithLifecycle()
+    val captionRun by vm.captionRun.collectAsStateWithLifecycle()
     @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
     val camPreset by vm.camPreset.collectAsStateWithLifecycle()
     val context = LocalContext.current
@@ -119,11 +121,18 @@ fun ProjectScreen(
             val sel = selection
             if (sel != null) {
                 Surface(color = MaterialTheme.colorScheme.surfaceContainerHigh) {
-                    Button(
-                        onClick = ::export,
-                        enabled = sel.isNotEmpty() && exportRun?.running != true,
-                        modifier = Modifier.fillMaxWidth().navigationBarsPadding().padding(16.dp),
-                    ) { Text("Export ${sel.size} clip${if (sel.size == 1) "" else "s"} (1080×1920)") }
+                    Row(Modifier.fillMaxWidth().navigationBarsPadding().padding(16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                        OutlinedButton(
+                            onClick = vm::captionSelected,
+                            enabled = sel.isNotEmpty() && captionRun?.running != true,
+                            modifier = Modifier.weight(1f),
+                        ) { Text("Captions & titles") }
+                        Button(
+                            onClick = ::export,
+                            enabled = sel.isNotEmpty() && exportRun?.running != true,
+                            modifier = Modifier.weight(1f),
+                        ) { Text("Export ${sel.size}") }
+                    }
                 }
             }
         },
@@ -168,6 +177,9 @@ fun ProjectScreen(
                                 onSetup = { vm.pause(); onOpenCamSetup(p.id, vm.currentPositionMs()) },
                                 onApply = vm::applyLayoutToAll,
                             )
+                        }
+                        captionRun?.takeIf { it.running || it.message != null }?.let { r ->
+                            item(key = "captions") { ExportCard(r, vm::cancelCaptions, title = "Captions & titles…") }
                         }
                         exportRun?.takeIf { it.running || it.message != null }?.let { r ->
                             item(key = "export") { ExportCard(r, vm::cancelExport) }

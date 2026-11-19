@@ -6,6 +6,8 @@ import androidx.lifecycle.viewModelScope
 import androidx.lifecycle.viewmodel.initializer
 import androidx.lifecycle.viewmodel.viewModelFactory
 import com.clipforge.ClipForgeApp
+import com.clipforge.captions.SpeechModel
+import com.clipforge.captions.SpeechModelStore
 import com.clipforge.net.WorkerClient
 import com.clipforge.net.WorkerException
 import com.clipforge.settings.AppSettings
@@ -17,7 +19,11 @@ import kotlinx.coroutines.flow.update
 import kotlinx.coroutines.launch
 import java.io.IOException
 
-class SettingsViewModel(private val repo: SettingsRepository, private val worker: WorkerClient) : ViewModel() {
+class SettingsViewModel(
+    private val repo: SettingsRepository,
+    private val worker: WorkerClient,
+    private val models: SpeechModelStore,
+) : ViewModel() {
 
     data class UiState(
         val loaded: Boolean = false,
@@ -34,6 +40,11 @@ class SettingsViewModel(private val repo: SettingsRepository, private val worker
         val useTrends: Boolean = true,
         val modelsSaved: Boolean = true,
         val exportFps: Int = 60,
+        val speechModel: SpeechModel = SpeechModel.TINY,
+        val captionLanguage: String = "auto",
+        val modelReady: Map<SpeechModel, Boolean> = emptyMap(),
+        val modelDownload: Float? = null,
+        val modelError: String? = null,
     )
 
     private val _state = MutableStateFlow(UiState())
@@ -46,6 +57,8 @@ class SettingsViewModel(private val repo: SettingsRepository, private val worker
                 it.copy(
                     loaded = true, workerUrl = s.workerUrl, connected = s.isConnected,
                     analysisModel = s.analysisModel, writingModel = s.writingModel, useTrends = s.useTrends, exportFps = s.exportFps,
+                    speechModel = SpeechModel.of(s.speechModel), captionLanguage = s.captionLanguage,
+                    modelReady = SpeechModel.entries.associateWith { m -> models.isReady(m) },
                 )
             }
             if (s.isConnected) refreshHealth(s.workerUrl)
@@ -60,6 +73,36 @@ class SettingsViewModel(private val repo: SettingsRepository, private val worker
     fun setUseTrends(v: Boolean) {
         _state.update { it.copy(useTrends = v) }
         viewModelScope.launch { repo.setUseTrends(v) }
+    }
+
+    fun setSpeechModel(m: SpeechModel) {
+        _state.update { it.copy(speechModel = m) }
+        viewModelScope.launch { repo.setSpeechModel(m.name) }
+    }
+
+    fun setCaptionLanguage(l: String) {
+        _state.update { it.copy(captionLanguage = l) }
+        viewModelScope.launch { repo.setCaptionLanguage(l) }
+    }
+
+    fun downloadModel() {
+        val m = _state.value.speechModel
+        _state.update { it.copy(modelDownload = 0f, modelError = null) }
+        viewModelScope.launch {
+            try {
+                models.ensure(m) { f -> _state.update { it.copy(modelDownload = f) } }
+            } catch (e: kotlinx.coroutines.CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                _state.update { it.copy(modelError = e.message) }
+            }
+            _state.update { it.copy(modelDownload = null, modelReady = SpeechModel.entries.associateWith { x -> models.isReady(x) }) }
+        }
+    }
+
+    fun deleteModel(m: SpeechModel) {
+        models.delete(m)
+        _state.update { it.copy(modelReady = SpeechModel.entries.associateWith { x -> models.isReady(x) }) }
     }
 
     fun setExportFps(fps: Int) {
@@ -129,7 +172,7 @@ class SettingsViewModel(private val repo: SettingsRepository, private val worker
         val Factory = viewModelFactory {
             initializer {
                 val app = this[APPLICATION_KEY] as ClipForgeApp
-                SettingsViewModel(app.container.settings, app.container.worker)
+                SettingsViewModel(app.container.settings, app.container.worker, SpeechModelStore(app))
             }
         }
     }

@@ -72,6 +72,7 @@ fun ClipEditorScreen(onBack: () -> Unit, vm: ClipEditorViewModel = viewModel(fac
     val strip by vm.strip.collectAsStateWithLifecycle()
     val sourceFrame by vm.sourceFrame.collectAsStateWithLifecycle()
     val exportRun by vm.exportRun.collectAsStateWithLifecycle()
+    val captionRun by vm.captionRun.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val storagePermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         if (granted) vm.export()
@@ -154,6 +155,7 @@ fun ClipEditorScreen(onBack: () -> Unit, vm: ClipEditorViewModel = viewModel(fac
                 }
 
                 FramingSection(st, sourceFrame, project.toVideoInfo().aspectRatio, vm)
+                TextSection(st, captionRun, vm)
 
                 Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
@@ -182,16 +184,6 @@ fun ClipEditorScreen(onBack: () -> Unit, vm: ClipEditorViewModel = viewModel(fac
                         Spacer(Modifier.size(12.dp))
                         SubScores(clip.hook, clip.payoff, clip.clarity, clip.emotion, clip.trendFit)
                         Spacer(Modifier.size(12.dp))
-                        OutlinedTextField(
-                            value = st.title,
-                            onValueChange = vm::setTitle,
-                            label = { Text("Title") },
-                            modifier = Modifier.fillMaxWidth(),
-                        )
-                        if (clip.hashtags.isNotBlank()) {
-                            Spacer(Modifier.size(8.dp))
-                            Text(clip.hashtags, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.primary)
-                        }
                         Spacer(Modifier.size(8.dp))
                         Text(
                             "Suggested: ${TimeFormat.format(clip.suggestedStartMs, true)}–${TimeFormat.format(clip.suggestedEndMs, true)}" +

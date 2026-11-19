@@ -40,6 +40,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import com.clipforge.R
 import com.clipforge.analysis.ModelPricing
+import com.clipforge.captions.SpeechModel
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -120,6 +121,35 @@ fun SettingsScreen(onBack: () -> Unit, vm: SettingsViewModel = viewModel(factory
                     listOf(30, 60).forEach { f -> FilterChip(selected = st.exportFps == f, onClick = { vm.setExportFps(f) }, label = { Text("$f fps") }) }
                 }
                 Text("60 fps keeps gameplay smooth; a 30 fps source stays at 30.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+
+            Section("Speech captions") {
+                Text("Captions are transcribed on your phone with whisper.cpp; audio never leaves the device. Claude only sees the text, to polish it.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                SpeechModel.entries.forEach { m ->
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        androidx.compose.material3.RadioButton(selected = st.speechModel == m, onClick = { vm.setSpeechModel(m) })
+                        Text(m.label, modifier = Modifier.weight(1f))
+                        if (st.modelReady[m] == true) {
+                            Text("downloaded", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary)
+                            androidx.compose.material3.TextButton(onClick = { vm.deleteModel(m) }) { Text("Delete") }
+                        }
+                    }
+                }
+                if (st.modelReady[st.speechModel] != true) {
+                    val dl = st.modelDownload
+                    if (dl != null) {
+                        androidx.compose.material3.LinearProgressIndicator(progress = { dl }, modifier = Modifier.fillMaxWidth())
+                    } else {
+                        OutlinedButton(onClick = vm::downloadModel) { Text("Download now (otherwise on first use)") }
+                    }
+                }
+                st.modelError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("Language", modifier = Modifier.weight(1f))
+                    listOf("auto" to "Auto-detect", "en" to "English").forEach { (code, label) ->
+                        FilterChip(selected = st.captionLanguage == code, onClick = { vm.setCaptionLanguage(code) }, label = { Text(label) })
+                    }
+                }
             }
 
             Section("Trends") {
