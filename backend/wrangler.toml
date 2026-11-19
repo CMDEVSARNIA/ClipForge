@@ -5,7 +5,7 @@ compatibility_flags = ["nodejs_compat"]
 
 [vars]
 # Models the app may request. Add more here if you change them in the app's Settings.
-ALLOWED_MODELS = "claude-haiku-5-5,claude-sonnet-5-5"
+ALLOWED_MODELS = "claude-haiku-5-5,claude-sonnet-5-5,claude-opus-5-5"
 # Hard cap on max_tokens per request.
 MAX_TOKENS_CAP = "16000"
 # Approximate per-install daily budget in USD (input+output tokens priced from the table in src/pricing.ts).
