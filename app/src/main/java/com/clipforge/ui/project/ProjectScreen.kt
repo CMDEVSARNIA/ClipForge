@@ -5,6 +5,12 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.items
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
@@ -17,10 +23,8 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilledIconButton
@@ -62,10 +66,17 @@ import com.clipforge.util.TimeFormat
 @Composable
 fun ProjectScreen(
     onBack: () -> Unit,
+    onOpenClip: (Long) -> Unit,
+    onOpenSettings: () -> Unit,
     vm: ProjectViewModel = viewModel(factory = ProjectViewModel.Factory),
 ) {
     val project by vm.project.collectAsStateWithLifecycle()
     val error by vm.error.collectAsStateWithLifecycle()
+    val clips by vm.clips.collectAsStateWithLifecycle()
+    val analysis by vm.analysis.collectAsStateWithLifecycle()
+    val run by vm.run.collectAsStateWithLifecycle()
+    val settings by vm.settings.collectAsStateWithLifecycle()
+    var showSheet by rememberSaveable { mutableStateOf(false) }
 
     LifecycleEventEffect(Lifecycle.Event.ON_STOP) { vm.pause() }
 
@@ -84,8 +95,8 @@ fun ProjectScreen(
         containerColor = MaterialTheme.colorScheme.background,
     ) { padding ->
         BoxWithConstraints(Modifier.fillMaxSize().padding(padding)) {
-            val maxPlayerHeight = maxHeight * 0.55f
-            Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState())) {
+            val maxPlayerHeight = maxHeight * 0.38f
+            Column(Modifier.fillMaxSize()) {
                 val p = project
                 Box(
                     Modifier.fillMaxWidth().background(Color.Black),
@@ -97,17 +108,36 @@ fun ProjectScreen(
                             modifier = Modifier.heightIn(max = maxPlayerHeight).aspectRatio(p.toVideoInfo().aspectRatio),
                         )
                     } else {
-                        Box(Modifier.fillMaxWidth().aspectRatio(16f / 9f))
+                        Box(Modifier.fillMaxWidth().heightIn(max = maxPlayerHeight).aspectRatio(16f / 9f))
                     }
                 }
-                error?.let { ErrorBanner(it) }
-                if (p != null && error == null) {
-                    Controls(vm)
+                if (p != null && error == null) Controls(vm)
+                LazyColumn(Modifier.weight(1f).fillMaxWidth(), contentPadding = PaddingValues(bottom = 24.dp)) {
+                    error?.let { e -> item { ErrorBanner(e) } }
+                    if (p != null && error == null) {
+                        item(key = "analyze") {
+                            AnalyzeCard(
+                                settings = settings,
+                                run = run,
+                                analysis = analysis,
+                                clipCount = clips.size,
+                                onFindMoments = { showSheet = true },
+                                onCancel = vm::cancelAnalysis,
+                                onOpenSettings = onOpenSettings,
+                            )
+                        }
+                        items(clips, key = { it.id }) { c ->
+                            ClipRow(c, p.sourceUri, vm.thumbnailLoader, onClick = { onOpenClip(c.id) }, onPreview = { vm.preview(c) })
+                        }
+                    }
+                    if (p != null) item(key = "info") { InfoCard(p) }
                 }
-                if (p != null) InfoCard(p)
-                Spacer(Modifier.height(24.dp))
             }
         }
+    }
+
+    if (showSheet) {
+        AnalyzeSheet(vm = vm, initialGame = analysis?.game.orEmpty(), onDismiss = { showSheet = false })
     }
 }
 
@@ -153,7 +183,7 @@ private fun VideoSurface(vm: ProjectViewModel, modifier: Modifier) {
 private fun Controls(vm: ProjectViewModel) {
     val playback by vm.playback.collectAsStateWithLifecycle()
     val thumbs by vm.thumbnails.collectAsStateWithLifecycle()
-    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp)) {
+    Column(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)) {
         ScrubTimeline(
             durationMs = playback.durationMs,
             positionMs = playback.positionMs,
@@ -180,7 +210,7 @@ private fun Controls(vm: ProjectViewModel) {
             )
         }
         Row(
-            Modifier.fillMaxWidth().padding(top = 8.dp),
+            Modifier.fillMaxWidth().padding(top = 2.dp),
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically,
         ) {
@@ -200,12 +230,6 @@ private fun Controls(vm: ProjectViewModel) {
             IconButton(onClick = { vm.seekBy(5_000) }) { Icon(painterResource(R.drawable.ic_forward5), "Forward 5 seconds") }
             TextButton(onClick = { vm.stepFrame(1) }) { Text("+1f") }
         }
-        Text(
-            "Tip: while dragging the timeline, slide your finger up to scrub slower.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(top = 4.dp),
-        )
     }
 }
 

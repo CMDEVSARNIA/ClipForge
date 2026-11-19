@@ -45,13 +45,18 @@ class ThumbnailLoader(private val context: Context) {
     }
 
     /** Emits (index, frame) for [count] evenly spaced frames, reusing one retriever. */
-    fun strip(uri: Uri, durationMs: Long, count: Int, maxWidth: Int, maxHeight: Int): Flow<Pair<Int, ImageBitmap>> = flow {
+    fun strip(uri: Uri, durationMs: Long, count: Int, maxWidth: Int, maxHeight: Int): Flow<Pair<Int, ImageBitmap>> =
+        stripRange(uri, 0, durationMs, count, maxWidth, maxHeight)
+
+    /** Like [strip] but over [startMs, endMs), e.g. the window around a clip in the trim editor. */
+    fun stripRange(uri: Uri, startMs: Long, endMs: Long, count: Int, maxWidth: Int, maxHeight: Int): Flow<Pair<Int, ImageBitmap>> = flow {
+        val span = (endMs - startMs).coerceAtLeast(1)
         val r = MediaMetadataRetriever()
         try {
             r.setDataSource(context, uri)
             for (i in 0 until count) {
                 currentCoroutineContext().ensureActive()
-                val t = (durationMs * (i + 0.5) / count).toLong()
+                val t = startMs + (span * (i + 0.5) / count).toLong()
                 val key = "$uri@$t@$maxWidth"
                 val bmp = cache.get(key) ?: r.frame(t, maxWidth, maxHeight)?.also { cache.put(key, it) }
                 if (bmp != null) emit(i to bmp)

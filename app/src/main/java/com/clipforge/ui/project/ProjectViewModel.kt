@@ -30,6 +30,19 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
+import androidx.work.WorkInfo
+import androidx.work.WorkManager
+import com.clipforge.analysis.AnalysisWorker
+import com.clipforge.analysis.CostEstimator
+import com.clipforge.data.db.AnalysisDao
+import com.clipforge.data.db.AnalysisEntity
+import com.clipforge.data.db.ClipDao
+import com.clipforge.data.db.ClipEntity
+import com.clipforge.settings.AppSettings
+import com.clipforge.settings.SettingsRepository
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -39,8 +52,52 @@ class ProjectViewModel(
     private val app: Application,
     private val projectId: Long,
     private val repo: ProjectRepository,
-    private val thumbnailLoader: ThumbnailLoader,
+    val thumbnailLoader: ThumbnailLoader,
+    settingsRepo: SettingsRepository,
+    analysisDao: AnalysisDao,
+    clipDao: ClipDao,
 ) : ViewModel() {
+
+    data class AnalysisRun(val running: Boolean, val fraction: Float, val step: String, val failedMessage: String?)
+
+    val settings: StateFlow<AppSettings?> = settingsRepo.settings.stateIn(viewModelScope, SharingStarted.Eagerly, null)
+    val clips: StateFlow<List<ClipEntity>> = clipDao.observeForProject(projectId).stateIn(viewModelScope, SharingStarted.Eagerly, emptyList())
+    val analysis: StateFlow<AnalysisEntity?> = analysisDao.observeLatest(projectId).stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
+    /** Live state of the background job (null when none has run in this process lifetime of WorkManager's history). */
+    val run: StateFlow<AnalysisRun?> = WorkManager.getInstance(app)
+        .getWorkInfosForUniqueWorkFlow(AnalysisWorker.uniqueName(projectId))
+        .map { infos ->
+            val info = infos.firstOrNull() ?: return@map null
+            val running = info.state == WorkInfo.State.RUNNING || info.state == WorkInfo.State.ENQUEUED || info.state == WorkInfo.State.BLOCKED
+            AnalysisRun(
+                running = running,
+                fraction = info.progress.getFloat(AnalysisWorker.KEY_FRACTION, 0f),
+                step = info.progress.getString(AnalysisWorker.KEY_STEP) ?: if (running) "Starting…" else "",
+                failedMessage = if (info.state == WorkInfo.State.FAILED) info.outputData.getString(AnalysisWorker.KEY_ERROR) else null,
+            )
+        }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
+    fun estimate(game: String): CostEstimator.Estimate? {
+        val p = _project.value ?: return null
+        val s = settings.value ?: return null
+        val info = p.toVideoInfo()
+        return CostEstimator.estimate(info.durationMs / 1000.0, info.displayWidth, info.displayHeight, s.analysisModel, s.writingModel, game.isBlank())
+    }
+
+    fun startAnalysis(game: String) {
+        player.pause()
+        AnalysisWorker.enqueue(app, projectId, game.trim().ifBlank { null })
+    }
+
+    fun cancelAnalysis() = AnalysisWorker.cancel(app, projectId)
+
+    fun preview(clip: ClipEntity) {
+        player.setSeekParameters(SeekParameters.EXACT)
+        player.seekTo(clip.startMs)
+        player.play()
+    }
 
     data class Playback(
         val positionMs: Long = 0,
@@ -186,7 +243,10 @@ class ProjectViewModel(
             initializer {
                 val app = this[APPLICATION_KEY] as ClipForgeApp
                 val route = createSavedStateHandle().toRoute<ProjectRoute>()
-                ProjectViewModel(app, route.projectId, app.container.projects, app.container.thumbnails)
+                ProjectViewModel(
+                    app, route.projectId, app.container.projects, app.container.thumbnails,
+                    app.container.settings, app.container.database.analysisDao(), app.container.database.clipDao(),
+                )
             }
         }
     }

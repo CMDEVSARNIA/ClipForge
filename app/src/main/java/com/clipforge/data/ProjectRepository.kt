@@ -4,6 +4,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import androidx.core.net.toUri
+import com.clipforge.analysis.SignalsStore
 import com.clipforge.data.db.ProjectDao
 import com.clipforge.data.db.ProjectEntity
 import com.clipforge.media.VideoProbe
@@ -13,6 +14,7 @@ class ProjectRepository(
     private val context: Context,
     private val dao: ProjectDao,
     private val probe: VideoProbe,
+    private val signals: SignalsStore,
 ) {
     fun observeProjects(): Flow<List<ProjectEntity>> = dao.observeAll()
 
@@ -61,7 +63,9 @@ class ProjectRepository(
     suspend fun touch(id: Long) = dao.touch(id, System.currentTimeMillis())
 
     suspend fun delete(project: ProjectEntity) {
-        dao.delete(project.id)
+        dao.delete(project.id) // clips and analyses cascade
+        signals.delete(project.id)
+        java.io.File(context.cacheDir, "analysis/${project.id}").deleteRecursively()
         if (project.persistedPermission) {
             runCatching {
                 context.contentResolver.releasePersistableUriPermission(

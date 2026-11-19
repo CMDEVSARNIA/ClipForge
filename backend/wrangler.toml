@@ -1,0 +1,35 @@
+name = "clipforge-worker"
+main = "src/index.ts"
+compatibility_date = "2026-11-01"
+compatibility_flags = ["nodejs_compat"]
+
+[vars]
+# Models the app may request. Add more here if you change them in the app's Settings.
+ALLOWED_MODELS = "claude-haiku-5-5,claude-sonnet-5-5"
+# Hard cap on max_tokens per request.
+MAX_TOKENS_CAP = "16000"
+# Approximate per-install daily budget in USD (input+output tokens priced from the table in src/pricing.ts).
+DAILY_BUDGET_USD = "2.00"
+
+# Per-install and per-IP rate limits (Workers Rate Limiting binding; period must be 10 or 60 s).
+[[ratelimits]]
+name = "TOKEN_LIMITER"
+namespace_id = "41001"
+simple = { limit = 30, period = 60 }
+
+[[ratelimits]]
+name = "REGISTER_LIMITER"
+namespace_id = "41002"
+simple = { limit = 5, period = 60 }
+
+# Daily spend counters, revocations and the YouTube trends cache.
+# Create with:  npx wrangler kv namespace create CLIPFORGE_KV   and paste the id below.
+[[kv_namespaces]]
+binding = "KV"
+id = "REPLACE_WITH_YOUR_KV_NAMESPACE_ID"
+
+# Secrets (never in this file):
+#   npx wrangler secret put ANTHROPIC_API_KEY
+#   npx wrangler secret put INVITE_CODE          # what you type into the app once
+#   npx wrangler secret put TOKEN_SIGNING_KEY    # random 32+ chars; rotating it signs everyone out
+#   npx wrangler secret put YOUTUBE_API_KEY      # optional, enables trend data

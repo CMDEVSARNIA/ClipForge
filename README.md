@@ -4,9 +4,22 @@ Android app that turns long gameplay recordings into vertical (9:16) TikTok / Yo
 Claude picks the moments and writes titles, and every Claude call goes through a small Cloudflare
 Worker so the Anthropic API key never ships inside the APK.
 
-> **Status: Phase 1 of 6: import & preview.** See [Roadmap](#roadmap).
+> **Status: Phase 2 of 6: moment finding & ranking.** See [Roadmap](#roadmap).
 
-## What works now (Phase 1)
+## What works now
+
+### Phase 2: moment finding & ranking
+
+- **Find moments** on any project. Before it runs you see the estimated API cost (frames, requests, models). Afterwards you see what it actually spent.
+- On-device signals: audio loudness (MediaCodec decoded to PCM, RMS per 0.5 s), a frame every 2 s (512 px JPEG), scene cuts (luma + color-histogram difference with an adaptive threshold), black frames.
+- **Frame analysis** (default `claude-haiku-5-5`): batches of up to 40 frames, each labeled with its timestamp, plus loudness peaks and scene cuts as text. Strict JSON through structured outputs, validated, retried once on bad output. The same pass flags full-screen text cards and wide shots for Phase 3's auto crop.
+- **Trend-aware ranking** (default `claude-sonnet-5-5`): one global pass compares every candidate against the others and against **the past week's most-viewed YouTube Shorts for the game**, through the Worker. It falls back to Claude's built-in knowledge when no YouTube key is set. Output: S/A/B/C/D tier, 0–100 score, subscores (hook, payoff, clarity, emotion, trend fit), a title, hashtags and a one-line reason.
+- The game is auto-detected from frames (or typed in) to look up trends.
+- **Scene snapping:** clip starts snap to the nearest cut. Ends never cross into the next scene. Lengths are pulled toward 8–30 s. Cuts near clip edges are refined to about 0.125 s with a binary search over exact frames.
+- **Trim editor:** handles over a zoomed filmstrip (the clip plus 20 s each side), magnetic snapping to scene cuts, ±0.1 s nudges, looped preview, editable title, reset to suggestion.
+- Runs as a WorkManager foreground job with a progress notification and a Cancel action, so you can leave the screen.
+
+### Phase 1: import & preview
 
 - Import a video with the Android Photo Picker (videos only). Read access is persisted so projects reopen after restart.
 - Projects list (Room) with thumbnails, duration, resolution, fps, size; remove a project (the original file is never touched).
@@ -65,8 +78,14 @@ app/src/main/java/com/clipforge/
   ui/nav/                  Type-safe navigation routes
   ui/home/                 Projects list + import
   ui/project/              Player screen + ViewModel (owns ExoPlayer)
-  ui/components/           ScrubTimeline + ScrubMath (pure, unit-tested)
-backend/                   Cloudflare Worker proxy (Phase 2)
+  analysis/                Moment pipeline: loudness, frame sampling, scene cuts, snapping,
+                           prompts/schemas, JSON parsing, cost estimate, WorkManager job
+  net/WorkerClient.kt      The only network client (talks to the Worker)
+  settings/                DataStore settings (Worker URL, app token, models)
+  ui/components/           Timelines (scrub, trim) + pure math, tier badges
+  ui/clip/                 Trim editor
+  ui/settings/             Settings screen
+backend/                   Cloudflare Worker (TypeScript): auth, proxy, budget, trends
 ```
 
 Memory: metadata probing reads container headers only; thumbnails are decoded at keyframes and
@@ -75,12 +94,79 @@ downscaled immediately (≤192 px, LRU-capped at 4 MB). Long files never load fu
 ## Roadmap
 
 1. ✅ Import & preview
-2. Moment finding: frame sampling, loudness and scene cuts, Claude (Haiku) via the Worker, cost estimate, ranked clips with trim handles
+2. ✅ Moment finding: frame sampling, loudness and scene cuts, Claude via the Worker, trend-aware ranking, cost estimate, trim editor
 3. Vertical edit & export (Media3 Transformer, 1080×1920 H.264/AAC, crop modes, WorkManager)
 4. Webcam layouts (facecam presets, split / PiP)
 5. Titles & captions (on-device whisper.cpp, word-highlight captions, Claude-polished text)
 6. In-app assistant with tool use + share sheet
 
-## Cloudflare Worker (Phase 2)
+## Cloudflare Worker (required for Claude features)
 
-Setup and deployment instructions land with Phase 2, along with the `backend/` source.
+The app never contains an Anthropic API key. It talks only to your Worker (`backend/`), which:
+
+- holds `ANTHROPIC_API_KEY` as a Worker secret and calls the Messages API with the official `@anthropic-ai/sdk`;
+- issues **per-install app tokens** (HMAC-signed) to installs that present your **invite code** once;
+- validates every request: model allowlist, `max_tokens` cap, a field allowlist, no streaming, no server tools;
+- rate-limits per install (30 requests/min) and per IP for registration (5/min), and enforces an approximate **daily budget per install** (default $2);
+- adds server-side refusal fallbacks (`fallbacks: "default"`) for Sonnet/Opus 5.5 requests;
+- serves `/v1/trends?game=…`: most-viewed Shorts from the past 7 days via the YouTube Data API, cached per game per day in KV.
+
+### Deploy
+
+You need a Cloudflare account (the free plan works) and Node 20+.
+
+```bash
+cd backend
+npm install
+npx wrangler login
+
+# 1. KV namespace for budgets, revocations and the trends cache
+npx wrangler kv namespace create CLIPFORGE_KV
+#    -> paste the printed id into wrangler.toml ([[kv_namespaces]] id = "...")
+
+# 2. Secrets (each command prompts for the value; nothing is stored in files)
+npx wrangler secret put ANTHROPIC_API_KEY    # from console.anthropic.com
+npx wrangler secret put INVITE_CODE          # any passphrase; you type it into the app once
+npx wrangler secret put TOKEN_SIGNING_KEY    # random, e.g. `openssl rand -hex 32`
+npx wrangler secret put YOUTUBE_API_KEY      # optional, see below
+
+# 3. Deploy
+npx wrangler deploy                          # prints https://clipforge-worker.<you>.workers.dev
+```
+
+In the app: **Settings → Worker URL** (the printed URL) **+ invite code → Connect.**
+
+**YouTube trends (optional, free):** in Google Cloud Console, create a project, enable **YouTube Data API v3**,
+create an **API key** (restrict it to that API), then `wrangler secret put YOUTUBE_API_KEY`.
+One fresh lookup costs about 101 quota units of the default 10,000/day, and results are cached per game per day.
+Without the key, ranking uses Claude's built-in knowledge and the app says so.
+
+**Configuration** (`wrangler.toml` `[vars]`): `ALLOWED_MODELS` (add a model here before you select it in the app),
+`MAX_TOKENS_CAP`, `DAILY_BUDGET_USD`. Rate limits live in the `[[ratelimits]]` blocks.
+
+**Revoking access:** rotate `INVITE_CODE` to stop new registrations. Rotate `TOKEN_SIGNING_KEY` to sign out every install.
+To revoke a single install, run `npx wrangler kv key put --binding KV "revoked:<install-id>" 1`.
+
+**Local dev / tests:**
+
+```bash
+cp .dev.vars.example .dev.vars   # fake values are fine for local testing
+npm run typecheck && npm test
+npx wrangler dev                 # http://127.0.0.1:8787/health
+```
+
+### Cost
+
+The app shows an estimate before each run (from `CostEstimator`, with prices in `ModelPricing`). With the defaults on 1080p:
+
+| Video | Frame analysis (Haiku 5.5) | Ranking (Sonnet 5.5) | Total |
+|---|---|---|---|
+| 10 min | ~$0.016 | ~$0.08 | **~$0.09** |
+| 60 min | ~$0.09 | ~$0.12 | **~$0.21** |
+
+These are estimates. Thinking tokens vary. The card on each project shows what a run actually cost.
+
+### Privacy
+
+Sampled frames (512 px JPEGs) and timing data go to your Worker and then to the Anthropic API. The full video never leaves the phone.
+Frames are cached in the app's cache directory during analysis and deleted when it finishes.

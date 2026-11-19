@@ -69,6 +69,7 @@ import com.clipforge.util.TimeFormat
 @Composable
 fun HomeScreen(
     onOpenProject: (Long) -> Unit,
+    onOpenSettings: () -> Unit,
     vm: HomeViewModel = viewModel(factory = HomeViewModel.Factory),
 ) {
     val projects by vm.projects.collectAsStateWithLifecycle()
@@ -98,6 +99,9 @@ fun HomeScreen(
                         Text("Clip", fontWeight = FontWeight.Black)
                         Text("Forge", fontWeight = FontWeight.Black, color = MaterialTheme.colorScheme.primary)
                     }
+                },
+                actions = {
+                    IconButton(onClick = onOpenSettings) { Icon(painterResource(R.drawable.ic_settings), "Settings") }
                 },
                 colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.background),
             )
@@ -170,7 +174,7 @@ private fun EmptyState(onImport: () -> Unit, enabled: Boolean) {
         Text("Turn long gameplay into Shorts", style = MaterialTheme.typography.headlineSmall)
         Spacer(Modifier.height(8.dp))
         Text(
-            "Import a recording to preview it. Moment finding and vertical export arrive in the next phases.",
+            "Import a recording, then let Claude find and rank the moments worth posting. Connect your Worker in Settings first.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
