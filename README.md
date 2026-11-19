@@ -96,6 +96,14 @@ Dark-only, built from the logo:
 
 Main libraries: AGP 9.5, Kotlin 2.4 (AGP built-in Kotlin), Compose BOM 2026.09 / Material 3, Media3 1.11, Room 2.8 (KSP), Navigation 2.10 (type-safe routes).
 
+## Download the APK
+
+GitHub Actions builds the app on every push (`.github/workflows/android.yml`):
+
+- **Releases → "ClipForge (latest debug build)"**: the newest APK from the latest push. Open this page on your phone, tap the `.apk`, and install.
+- **Actions → a run → Artifacts**: the same APK, zipped.
+- Pushing a tag like `v1.0.0` creates a proper release with the APK attached.
+
 ## Build the APK
 
 whisper.cpp is a **git submodule**. Clone with submodules (or init them afterwards):
