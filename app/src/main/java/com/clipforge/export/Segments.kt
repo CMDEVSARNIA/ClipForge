@@ -14,7 +14,7 @@ data class Segment(
     val zoomRect: NRect? = null,
 ) {
     val lengthMs: Long get() = endMs - startMs
-    fun request() = LayoutRequest(mode, panX, zoomRect)
+    fun request(cam: CamSpec? = null) = LayoutRequest(mode, panX, zoomRect, cam)
 }
 
 object SegmentPlanner {

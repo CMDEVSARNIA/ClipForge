@@ -77,6 +77,7 @@ fun ProjectScreen(
     onBack: () -> Unit,
     onOpenClip: (Long) -> Unit,
     onOpenSettings: () -> Unit,
+    onOpenCamSetup: (projectId: Long, atMs: Long) -> Unit,
     vm: ProjectViewModel = viewModel(factory = ProjectViewModel.Factory),
 ) {
     val project by vm.project.collectAsStateWithLifecycle()
@@ -87,6 +88,8 @@ fun ProjectScreen(
     val settings by vm.settings.collectAsStateWithLifecycle()
     val exportRun by vm.exportRun.collectAsStateWithLifecycle()
     val selection by vm.selection.collectAsStateWithLifecycle()
+    @OptIn(kotlinx.coroutines.ExperimentalCoroutinesApi::class)
+    val camPreset by vm.camPreset.collectAsStateWithLifecycle()
     val context = LocalContext.current
     val permissions = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { vm.exportSelected() }
     fun export() {
@@ -156,6 +159,14 @@ fun ProjectScreen(
                                 onFindMoments = { showSheet = true },
                                 onCancel = vm::cancelAnalysis,
                                 onOpenSettings = onOpenSettings,
+                            )
+                        }
+                        item(key = "facecam") {
+                            FacecamCard(
+                                preset = camPreset,
+                                hasClips = clips.isNotEmpty(),
+                                onSetup = { vm.pause(); onOpenCamSetup(p.id, vm.currentPositionMs()) },
+                                onApply = vm::applyLayoutToAll,
                             )
                         }
                         exportRun?.takeIf { it.running || it.message != null }?.let { r ->

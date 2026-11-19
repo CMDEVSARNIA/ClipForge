@@ -23,6 +23,8 @@ data class ProjectEntity(
     val persistedPermission: Boolean,
     val createdAt: Long,
     val updatedAt: Long,
+    /** Facecam preset used by this project's Split / PiP layouts. */
+    val camPresetId: Long? = null,
 ) {
     fun toVideoInfo() = VideoInfo(
         durationMs = durationMs,

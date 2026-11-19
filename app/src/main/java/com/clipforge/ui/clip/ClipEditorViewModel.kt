@@ -25,7 +25,11 @@ import com.clipforge.data.db.ClipDao
 import com.clipforge.data.db.ClipEntity
 import com.clipforge.data.db.ProjectDao
 import com.clipforge.data.db.ProjectEntity
+import com.clipforge.export.CamLayout
+import com.clipforge.export.CamSpec
 import com.clipforge.export.CropMath
+import com.clipforge.export.PipCorner
+import com.clipforge.data.db.CamPresetDao
 import com.clipforge.export.CropMode
 import com.clipforge.export.ExportWorker
 import com.clipforge.export.LayoutEffect
@@ -57,6 +61,7 @@ class ClipEditorViewModel(
     private val projectDao: ProjectDao,
     private val signals: SignalsStore,
     private val thumbnails: ThumbnailLoader,
+    private val camPresets: CamPresetDao,
 ) : ViewModel() {
 
     data class State(
@@ -80,7 +85,13 @@ class ClipEditorViewModel(
         val selectedSegment: Int = 0,
         val preview916: Boolean = true,
         val previewError: String? = null,
+        /** Facecam rect from the project's preset; null = no facecam set up. */
+        val camRect: NRect? = null,
+        val camLayout: CamLayout = CamLayout.NONE,
+        val pipCorner: PipCorner = PipCorner.TR,
     ) {
+        val cam: CamSpec? get() = camRect?.takeIf { camLayout != CamLayout.NONE }?.let { CamSpec(it, camLayout, pipCorner) }
+
         val lengthMs: Long get() = endMs - startMs
 
         /** Segments as they will export. */
@@ -95,6 +106,7 @@ class ClipEditorViewModel(
             get() = clip != null && (
                 startMs != clip.startMs || endMs != clip.endMs || title != clip.title ||
                     cropMode.name != clip.cropMode || panX != clip.panX || zoomRect?.toCsv() != clip.zoomRect ||
+                    camLayout.name != clip.camLayout || pipCorner.name != clip.pipCorner ||
                     customSegments?.let { SegmentPlanner.encode(SegmentPlanner.normalize(it, startMs, endMs)) } != clip.segmentsJson
                 )
 
@@ -147,7 +159,7 @@ class ClipEditorViewModel(
                 }
                 val pos = if (dragging == TrimMath.Handle.NONE) player.currentPosition else st.playheadMs
                 val segs = st.segments
-                if (segs.isNotEmpty()) previewRequest = segs[SegmentPlanner.indexAt(segs, pos)].request()
+                if (segs.isNotEmpty()) previewRequest = segs[SegmentPlanner.indexAt(segs, pos)].request(st.cam)
                 _state.update { it.copy(playheadMs = pos, isPlaying = player.isPlaying) }
                 delay(if (player.isPlaying) 33 else 150)
             }
@@ -161,11 +173,13 @@ class ClipEditorViewModel(
         val cuts = sig?.cuts.orEmpty().map { (it * 1000).toLong() }
         val special = sig?.specialFrames.orEmpty().map { (it.tS * 1000).toLong() }
         val (ws, we) = TrimMath.window(clip.suggestedStartMs, clip.suggestedEndMs, clip.startMs, clip.endMs, project.durationMs)
+        val camRect = project.camPresetId?.let { camPresets.get(it) }?.let { NRect.fromCsv(it.rect) }
         _state.value = State(
             clip = clip, project = project, startMs = clip.startMs, endMs = clip.endMs, title = clip.title,
             windowStartMs = ws, windowEndMs = we, cutsMs = cuts, specialMs = special, playheadMs = clip.startMs,
             cropMode = CropMode.of(clip.cropMode), panX = clip.panX, zoomRect = NRect.fromCsv(clip.zoomRect),
             customSegments = SegmentPlanner.decode(clip.segmentsJson),
+            camRect = camRect, camLayout = CamLayout.of(clip.camLayout), pipCorner = PipCorner.of(clip.pipCorner),
         )
         // Effects must be set before prepare(); they can be swapped afterwards.
         player.setVideoEffects(listOf(LayoutEffect(PREVIEW_W, PREVIEW_H) { previewRequest }))
@@ -280,6 +294,9 @@ class ClipEditorViewModel(
         }
     }
 
+    fun setCamLayout(l: CamLayout) = _state.update { it.copy(camLayout = l) }
+    fun setPipCorner(c: PipCorner) = _state.update { it.copy(pipCorner = c, camLayout = CamLayout.PIP) }
+
     fun setPan(pan: Float) = editSelected { it.copy(panX = pan.coerceIn(-1f, 1f)) }
 
     fun setZoomRect(r: NRect) = editSelected { it.copy(zoomRect = CropMath.clampRect(r)) }
@@ -327,6 +344,7 @@ class ClipEditorViewModel(
                 edited = c.edited || st.startMs != c.startMs || st.endMs != c.endMs || st.title != c.title,
                 cropMode = st.cropMode.name, panX = st.panX, zoomRect = st.zoomRect?.toCsv(),
                 segmentsJson = st.customSegments?.let { SegmentPlanner.encode(SegmentPlanner.normalize(it, st.startMs, st.endMs)) },
+                camLayout = st.camLayout.name, pipCorner = st.pipCorner.name,
             )
             clipDao.update(updated)
             _state.update { it.copy(clip = updated, title = updated.title) }
@@ -351,7 +369,7 @@ class ClipEditorViewModel(
                 val app = this[APPLICATION_KEY] as ClipForgeApp
                 val route = createSavedStateHandle().toRoute<ClipEditorRoute>()
                 val c = app.container
-                ClipEditorViewModel(app, route.clipId, c.database.clipDao(), c.database.projectDao(), c.signals, c.thumbnails)
+                ClipEditorViewModel(app, route.clipId, c.database.clipDao(), c.database.projectDao(), c.signals, c.thumbnails, c.database.camPresetDao())
             }
         }
     }

@@ -37,7 +37,9 @@ import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.dp
+import com.clipforge.export.CamLayout
 import com.clipforge.export.CropMath
+import com.clipforge.export.PipCorner
 import com.clipforge.export.CropMode
 import com.clipforge.export.NRect
 import com.clipforge.util.TimeFormat
@@ -57,6 +59,26 @@ fun FramingSection(
         modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Facecam layout", style = MaterialTheme.typography.labelLarge)
+            if (st.camRect == null) {
+                Text(
+                    "No facecam set for this video. Set one up on the project screen to use Split or Picture-in-picture.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            } else {
+                Row(Modifier.horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    CamLayout.entries.forEach { l -> FilterChip(selected = st.camLayout == l, onClick = { vm.setCamLayout(l) }, label = { Text(l.label) }) }
+                }
+                if (st.camLayout == CamLayout.PIP) {
+                    Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                        PipCorner.entries.forEach { c -> FilterChip(selected = st.pipCorner == c, onClick = { vm.setPipCorner(c) }, label = { Text(c.label) }) }
+                    }
+                }
+                if (st.camLayout == CamLayout.SPLIT) {
+                    Text("Cam on top (35%), gameplay below. Crop modes below adjust the gameplay part.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text("Vertical framing", style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
                 Text("9:16 preview", style = MaterialTheme.typography.labelMedium)

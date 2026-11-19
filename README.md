@@ -4,9 +4,19 @@ Android app that turns long gameplay recordings into vertical (9:16) TikTok / Yo
 Claude picks the moments and writes titles, and every Claude call goes through a small Cloudflare
 Worker so the Anthropic API key never ships inside the APK.
 
-> **Status: Phase 3 of 6: vertical edit & export.** See [Roadmap](#roadmap).
+> **Status: Phase 4 of 6: webcam layouts.** See [Roadmap](#roadmap).
 
 ## What works now
+
+### Phase 4: webcam layouts
+
+- **Facecam presets:** on a project, tap **Facecam → Set up**, scrub to a frame where your webcam is visible, and drag a box over it (corners resize). Presets are global and reusable across projects. You get a warning if one was drawn on a differently shaped video.
+- **Layouts**, per clip in the editor or for all clips from the project screen:
+  - **Split:** cam fills the top 35%, gameplay the bottom 65% (both cover-cropped, no distortion). The gameplay part follows the clip's crop mode (Pan offset, Zoom-fit box).
+  - **Picture-in-picture:** the cam in a rounded box (38% of the width, its own aspect kept within 0.75–1.78), in any corner. Margins keep it clear of the platform UI: 9% from the top, 22% from the bottom, 4% from the sides.
+  - **Gameplay only.**
+- The live 9:16 preview and the export use the same renderer (`LayoutEffect`'s second layer), so the preview matches the file.
+- PiP pairs best with Center crop or Pan. With Fit + blur, the original cam stays visible inside the full frame.
 
 ### Phase 3: vertical edit & export
 
@@ -97,7 +107,8 @@ app/src/main/java/com/clipforge/
   ui/components/           Timelines (scrub, trim) + pure math, tier badges
   export/                  Crop math, segments, GPU layout effect, audio fades, faststart,
                            Transformer exporter, batch ExportWorker
-  ui/clip/                 Trim + framing editor
+  ui/clip/                 Trim + framing + layout editor
+  ui/cam/                  Facecam preset setup
   ui/settings/             Settings screen
 backend/                   Cloudflare Worker (TypeScript): auth, proxy, budget, trends
 ```
@@ -110,7 +121,7 @@ downscaled immediately (≤192 px, LRU-capped at 4 MB). Long files never load fu
 1. ✅ Import & preview
 2. ✅ Moment finding: frame sampling, loudness and scene cuts, Claude via the Worker, trend-aware ranking, cost estimate, trim editor
 3. ✅ Vertical edit & export (Media3 Transformer, 1080×1920 H.264/AAC, crop modes per segment, WorkManager)
-4. Webcam layouts (facecam presets, split / PiP)
+4. ✅ Webcam layouts (facecam presets, split / PiP)
 5. Titles & captions (on-device whisper.cpp, word-highlight captions, Claude-polished text)
 6. In-app assistant with tool use + share sheet
 

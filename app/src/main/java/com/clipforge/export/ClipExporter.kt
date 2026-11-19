@@ -71,6 +71,7 @@ class ClipExporter(private val context: Context) {
         segments: List<Segment>,
         fileIndex: Int,
         targetFps: Int,
+        cam: CamSpec?,
         onProgress: (Float) -> Unit,
     ): Result {
         val warnings = ArrayList<String>()
@@ -83,7 +84,7 @@ class ClipExporter(private val context: Context) {
 
         val fps = ExportMath.outputFps(project.frameRate, targetFps)
         val enc = ExportMath.encodeSettings(fps)
-        val items = segs.mapIndexed { i, s -> buildItem(source, s, i == 0, i == segs.lastIndex, project.frameRate, fps, project.hasAudio) }
+        val items = segs.mapIndexed { i, s -> buildItem(source, s, cam, i == 0, i == segs.lastIndex, project.frameRate, fps, project.hasAudio) }
 
         val tmp = File(context.cacheDir, "export/${clip.id}_${System.currentTimeMillis()}.mp4").also { it.parentFile?.mkdirs() }
         val fixed = File(tmp.path.removeSuffix(".mp4") + "_fs.mp4")
@@ -105,6 +106,7 @@ class ClipExporter(private val context: Context) {
     private fun buildItem(
         source: Uri,
         seg: Segment,
+        cam: CamSpec?,
         first: Boolean,
         last: Boolean,
         sourceFps: Float,
@@ -122,7 +124,7 @@ class ClipExporter(private val context: Context) {
             .build()
         val video = ArrayList<Effect>()
         if (sourceFps > fps + 0.5f) video += FrameDropEffect.createDefaultFrameDropEffect(fps.toFloat())
-        video += LayoutEffect.constant(CropMath.OUT_W, CropMath.OUT_H, seg.request())
+        video += LayoutEffect.constant(CropMath.OUT_W, CropMath.OUT_H, seg.request(cam))
 
         val audio = ArrayList<AudioProcessor>()
         if (hasAudio) {

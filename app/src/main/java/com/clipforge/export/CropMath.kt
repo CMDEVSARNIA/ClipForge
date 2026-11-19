@@ -43,8 +43,19 @@ data class Layer(val src: NRect, val dst: NRect, val cornerRadiusPx: Float = 0f)
  */
 data class LayoutSpec(val background: NRect?, val bgDim: Float, val layers: List<Layer>)
 
+enum class CamLayout(val label: String) { NONE("Gameplay only"), SPLIT("Split"), PIP("Picture-in-picture");
+    companion object { fun of(name: String?) = entries.firstOrNull { it.name == name } ?: NONE }
+}
+
+enum class PipCorner(val label: String) { TL("Top left"), TR("Top right"), BL("Bottom left"), BR("Bottom right");
+    companion object { fun of(name: String?) = entries.firstOrNull { it.name == name } ?: TR }
+}
+
+/** Facecam region in the source plus how to lay it out. */
+data class CamSpec(val rect: NRect, val layout: CamLayout, val corner: PipCorner = PipCorner.TR)
+
 /** Mode + parameters, resolved against the real input size on the GL thread. */
-data class LayoutRequest(val mode: CropMode, val panX: Float = 0f, val zoomRect: NRect? = null)
+data class LayoutRequest(val mode: CropMode, val panX: Float = 0f, val zoomRect: NRect? = null, val cam: CamSpec? = null)
 
 object CropMath {
     const val OUT_W = 1080
@@ -77,7 +88,71 @@ object CropMath {
         return NRect((1 - w) / 2, (1 - h) / 2, (1 + w) / 2, (1 + h) / 2)
     }
 
+    // ---- Facecam layouts ----
+    /** Split: the cam band takes the top 35%, gameplay the rest. */
+    const val SPLIT_CAM_FRACTION = 0.35f
+    /** PiP box width as a fraction of the output width. */
+    const val PIP_WIDTH = 0.38f
+    const val PIP_RADIUS_PX = 36f
+    /** PiP margins keep the box clear of TikTok/Shorts UI: status/top bar, caption + buttons at the bottom. */
+    const val PIP_SIDE_MARGIN = 0.04f
+    const val PIP_TOP_MARGIN = 0.09f
+    const val PIP_BOTTOM_MARGIN = 0.22f
+    /** Very tall or very wide cam boxes are cropped to this aspect range for PiP. */
+    const val PIP_MIN_ASPECT = 0.75f
+    const val PIP_MAX_ASPECT = 1.78f
+
+    /**
+     * Largest sub-rect of [region] (normalized) whose *pixel* aspect is [targetAspect], centered and
+     * shifted by [panX] (-1..1) along the cropped axis.
+     */
+    fun coverWithin(region: NRect, srcW: Int, srcH: Int, targetAspect: Float, panX: Float = 0f): NRect {
+        val rw = region.w * srcW
+        val rh = region.h * srcH
+        return if (rw / rh > targetAspect) {
+            val w = rh * targetAspect / srcW
+            val l = region.l + (region.w - w) / 2 * (1f + panX.coerceIn(-1f, 1f))
+            NRect(l, region.t, l + w, region.b)
+        } else {
+            val h = rw / targetAspect / srcH
+            val t = region.t + (region.h - h) / 2
+            NRect(region.l, t, region.r, t + h)
+        }
+    }
+
+    private fun withCam(base: LayoutSpec, req: LayoutRequest, cam: CamSpec, srcW: Int, srcH: Int, outW: Int, outH: Int): LayoutSpec {
+        val camRect = clampRect(cam.rect)
+        return when (cam.layout) {
+            CamLayout.NONE -> base
+            CamLayout.SPLIT -> {
+                val camDst = NRect(0f, 0f, 1f, SPLIT_CAM_FRACTION)
+                val gameDst = NRect(0f, SPLIT_CAM_FRACTION, 1f, 1f)
+                val camSrc = coverWithin(camRect, srcW, srcH, outW / (outH * SPLIT_CAM_FRACTION))
+                val region = if (req.mode == CropMode.ZOOM_FIT) clampRect(req.zoomRect ?: defaultZoomRect()) else NRect.FULL
+                val pan = if (req.mode == CropMode.PAN) req.panX else 0f
+                val gameSrc = coverWithin(region, srcW, srcH, outW / (outH * (1f - SPLIT_CAM_FRACTION)), pan)
+                LayoutSpec(null, 1f, listOf(Layer(gameSrc, gameDst), Layer(camSrc, camDst)))
+            }
+            CamLayout.PIP -> {
+                val rawAspect = camRect.w * srcW / (camRect.h * srcH)
+                val aspect = rawAspect.coerceIn(PIP_MIN_ASPECT, PIP_MAX_ASPECT)
+                val camSrc = if (aspect == rawAspect) camRect else coverWithin(camRect, srcW, srcH, aspect)
+                val w = PIP_WIDTH
+                val h = w * outW / aspect / outH
+                val l = if (cam.corner == PipCorner.TL || cam.corner == PipCorner.BL) PIP_SIDE_MARGIN else 1f - PIP_SIDE_MARGIN - w
+                val t = if (cam.corner == PipCorner.TL || cam.corner == PipCorner.TR) PIP_TOP_MARGIN else 1f - PIP_BOTTOM_MARGIN - h
+                val pip = Layer(camSrc, NRect(l, t, l + w, t + h), PIP_RADIUS_PX)
+                base.copy(layers = base.layers.take(1) + pip)
+            }
+        }
+    }
+
     fun spec(req: LayoutRequest, srcW: Int, srcH: Int, outW: Int = OUT_W, outH: Int = OUT_H): LayoutSpec {
+        val base = baseSpec(req, srcW, srcH, outW, outH)
+        return req.cam?.let { withCam(base, req, it, srcW, srcH, outW, outH) } ?: base
+    }
+
+    private fun baseSpec(req: LayoutRequest, srcW: Int, srcH: Int, outW: Int, outH: Int): LayoutSpec {
         val full = NRect.FULL
         return when (req.mode) {
             CropMode.CENTER, CropMode.AUTO -> LayoutSpec(null, 1f, listOf(Layer(coverRect(srcW, srcH, outW, outH), full)))

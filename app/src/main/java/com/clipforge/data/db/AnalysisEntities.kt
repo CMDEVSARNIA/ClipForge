@@ -80,6 +80,9 @@ data class ClipEntity(
     val segmentsJson: String? = null,
     val exportedUri: String? = null,
     val exportedAt: Long? = null,
+    /** NONE (gameplay only), SPLIT or PIP; needs the project's facecam preset. */
+    @ColumnInfo(defaultValue = "NONE") val camLayout: String = "NONE",
+    @ColumnInfo(defaultValue = "TR") val pipCorner: String = "TR",
 ) {
     val lengthMs: Long get() = endMs - startMs
 }
@@ -122,6 +125,9 @@ interface ClipDao {
     @Query("SELECT * FROM clips WHERE id IN (:ids) ORDER BY rank ASC")
     suspend fun getAll(ids: List<Long>): List<ClipEntity>
 
+    @Query("UPDATE clips SET camLayout = :layout, pipCorner = :corner WHERE projectId = :projectId")
+    suspend fun setLayoutForProject(projectId: Long, layout: String, corner: String)
+
     @Query("UPDATE clips SET exportedUri = :uri, exportedAt = :at WHERE id = :id")
     suspend fun markExported(id: Long, uri: String, at: Long)
 
@@ -133,4 +139,37 @@ interface ClipDao {
         deleteForProject(projectId)
         insertAll(clips)
     }
+}
+
+/** A facecam rectangle drawn once and reused across projects with the same layout. */
+@Entity(tableName = "cam_presets")
+data class CamPresetEntity(
+    @PrimaryKey(autoGenerate = true) val id: Long = 0,
+    val name: String,
+    /** Normalized "l,t,r,b" in display orientation. */
+    val rect: String,
+    /** Source aspect (w/h) it was drawn on, to warn when used on a differently shaped video. */
+    val sourceAspect: Float,
+    val createdAt: Long,
+)
+
+@Dao
+interface CamPresetDao {
+    @Query("SELECT * FROM cam_presets ORDER BY createdAt DESC")
+    fun observeAll(): Flow<List<CamPresetEntity>>
+
+    @Query("SELECT * FROM cam_presets WHERE id = :id")
+    suspend fun get(id: Long): CamPresetEntity?
+
+    @Query("SELECT * FROM cam_presets WHERE id = :id")
+    fun observe(id: Long): Flow<CamPresetEntity?>
+
+    @Insert
+    suspend fun insert(p: CamPresetEntity): Long
+
+    @Update
+    suspend fun update(p: CamPresetEntity)
+
+    @Query("DELETE FROM cam_presets WHERE id = :id")
+    suspend fun delete(id: Long)
 }

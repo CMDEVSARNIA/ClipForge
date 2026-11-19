@@ -25,6 +25,9 @@ interface ProjectDao {
     @Query("UPDATE projects SET updatedAt = :now WHERE id = :id")
     suspend fun touch(id: Long, now: Long)
 
+    @Query("UPDATE projects SET camPresetId = :presetId WHERE id = :id")
+    suspend fun setCamPreset(id: Long, presetId: Long?)
+
     @Query("DELETE FROM projects WHERE id = :id")
     suspend fun delete(id: Long)
 }

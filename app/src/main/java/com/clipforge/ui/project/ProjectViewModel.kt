@@ -42,6 +42,13 @@ import com.clipforge.data.db.AnalysisDao
 import com.clipforge.data.db.AnalysisEntity
 import com.clipforge.data.db.ClipDao
 import com.clipforge.data.db.ClipEntity
+import com.clipforge.data.db.CamPresetDao
+import com.clipforge.data.db.CamPresetEntity
+import com.clipforge.data.db.ProjectDao
+import com.clipforge.export.CamLayout
+import com.clipforge.export.PipCorner
+import kotlinx.coroutines.flow.flatMapLatest
+import kotlinx.coroutines.flow.flowOf
 import com.clipforge.settings.AppSettings
 import com.clipforge.settings.SettingsRepository
 import kotlinx.coroutines.isActive
@@ -57,7 +64,10 @@ class ProjectViewModel(
     settingsRepo: SettingsRepository,
     analysisDao: AnalysisDao,
     clipDao: ClipDao,
+    private val projectDao: ProjectDao,
+    private val camPresetDao: CamPresetDao,
 ) : ViewModel() {
+    private val clipDaoRef = clipDao
 
     data class AnalysisRun(val running: Boolean, val fraction: Float, val step: String, val failedMessage: String?)
 
@@ -137,6 +147,19 @@ class ProjectViewModel(
     }
 
     fun cancelExport() = ExportWorker.cancel(app, projectId)
+
+    // ---- facecam ----
+
+    @kotlinx.coroutines.ExperimentalCoroutinesApi
+    val camPreset: StateFlow<CamPresetEntity?> = projectDao.observe(projectId)
+        .flatMapLatest { p -> p?.camPresetId?.let { camPresetDao.observe(it) } ?: flowOf(null) }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, null)
+
+    fun applyLayoutToAll(layout: CamLayout, corner: PipCorner) {
+        viewModelScope.launch { clipDaoRef.setLayoutForProject(projectId, layout.name, corner.name) }
+    }
+
+    fun currentPositionMs(): Long = player.currentPosition
 
     fun preview(clip: ClipEntity) {
         player.setSeekParameters(SeekParameters.EXACT)
@@ -291,6 +314,7 @@ class ProjectViewModel(
                 ProjectViewModel(
                     app, route.projectId, app.container.projects, app.container.thumbnails,
                     app.container.settings, app.container.database.analysisDao(), app.container.database.clipDao(),
+                    app.container.database.projectDao(), app.container.database.camPresetDao(),
                 )
             }
         }

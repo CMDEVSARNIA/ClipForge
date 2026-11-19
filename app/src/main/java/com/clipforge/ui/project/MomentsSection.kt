@@ -303,3 +303,47 @@ fun MomentsHeader(count: Int, selection: Set<Long>?, onSelect: () -> Unit, onSel
         }
     }
 }
+
+@Composable
+fun FacecamCard(
+    preset: com.clipforge.data.db.CamPresetEntity?,
+    hasClips: Boolean,
+    onSetup: () -> Unit,
+    onApply: (com.clipforge.export.CamLayout, com.clipforge.export.PipCorner) -> Unit,
+) {
+    var corner by rememberSaveable { mutableStateOf(com.clipforge.export.PipCorner.TR) }
+    Surface(
+        shape = RoundedCornerShape(16.dp),
+        color = MaterialTheme.colorScheme.surfaceContainer,
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 8.dp),
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("Facecam", style = MaterialTheme.typography.titleMedium)
+                    Text(
+                        preset?.let { "Using \"${it.name}\"" } ?: "Draw a box over your webcam once to unlock Split and Picture-in-picture.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                OutlinedButton(onClick = onSetup) { Text(if (preset == null) "Set up" else "Edit") }
+            }
+            if (preset != null && hasClips) {
+                Text("Layout for all clips", style = MaterialTheme.typography.labelLarge)
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    com.clipforge.export.CamLayout.entries.forEach { l ->
+                        androidx.compose.material3.AssistChip(onClick = { onApply(l, corner) }, label = { Text(l.label) })
+                    }
+                }
+                Row(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("PiP corner", style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(end = 4.dp))
+                    com.clipforge.export.PipCorner.entries.forEach { c ->
+                        androidx.compose.material3.FilterChip(selected = corner == c, onClick = { corner = c }, label = { Text(c.name) })
+                    }
+                }
+                Text("You can still change the layout per clip in the editor.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+        }
+    }
+}
