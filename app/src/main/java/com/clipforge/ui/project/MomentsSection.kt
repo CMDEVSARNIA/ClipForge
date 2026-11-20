@@ -208,12 +208,12 @@ fun AnalyzeSheet(
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            Button(onClick = { start(false) }, modifier = Modifier.fillMaxWidth()) { Text("Find moments") }
-            OutlinedButton(onClick = { start(true) }, modifier = Modifier.fillMaxWidth()) {
-                Icon(painterResource(R.drawable.ic_sparkle), null, Modifier.size(16.dp), tint = MaterialTheme.colorScheme.primary)
+            Button(onClick = { start(true) }, modifier = Modifier.fillMaxWidth()) {
+                Icon(painterResource(R.drawable.ic_sparkle), null, Modifier.size(16.dp))
                 Spacer(Modifier.width(6.dp))
                 Text("Autopilot: find, caption & export the best")
             }
+            OutlinedButton(onClick = { start(false) }, modifier = Modifier.fillMaxWidth()) { Text("Just find moments (I'll pick)") }
             Text(
                 "Autopilot exports ${settings.autopilotMinTier}-tier or better, up to ${settings.autopilotMaxClips} clips, using your defaults (Settings → Defaults & autopilot).",
                 style = MaterialTheme.typography.bodySmall,

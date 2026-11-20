@@ -41,6 +41,7 @@ data class AppSettings(
     val autopilotMaxClips: Int = 5,
     val autopilotCaptions: Boolean = true,
     val autopilotAfterImport: Boolean = false,
+    val onboardingDone: Boolean = false,
 ) {
     val isConnected: Boolean get() = workerUrl.isNotBlank() && appToken.isNotBlank()
 
@@ -72,6 +73,7 @@ class SettingsRepository(private val context: Context) {
         val apMax = androidx.datastore.preferences.core.intPreferencesKey("ap_max")
         val apCaptions = booleanPreferencesKey("ap_captions")
         val apAfterImport = booleanPreferencesKey("ap_after_import")
+        val onboardingDone = booleanPreferencesKey("onboarding_done")
     }
 
     val settings: Flow<AppSettings> = context.dataStore.data.map { p ->
@@ -95,6 +97,7 @@ class SettingsRepository(private val context: Context) {
             autopilotMaxClips = p[Keys.apMax] ?: 5,
             autopilotCaptions = p[Keys.apCaptions] ?: true,
             autopilotAfterImport = p[Keys.apAfterImport] ?: false,
+            onboardingDone = p[Keys.onboardingDone] ?: false,
         )
     }
 
@@ -147,6 +150,8 @@ class SettingsRepository(private val context: Context) {
             captions?.let { p[Keys.apCaptions] = it }
             afterImport?.let { p[Keys.apAfterImport] = it }
         }
+
+    suspend fun setOnboardingDone() = context.dataStore.edit { it[Keys.onboardingDone] = true }
 
     suspend fun setExportFps(fps: Int) = context.dataStore.edit { it[Keys.exportFps] = if (fps > 30) 60 else 30 }
 }

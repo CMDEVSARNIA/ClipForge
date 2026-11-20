@@ -8,6 +8,12 @@ Worker so the Anthropic API key never ships inside the APK.
 
 ## What works now
 
+### Easier to use (v0.9)
+
+- **First-run onboarding:** Welcome → Connect your server (skippable) → choose **Autopilot** or **Hands-on** → import your first video. Installs that were already connected skip it.
+- **Simpler Settings:** the main page has the server status, defaults and autopilot, watermark, captions and export. Models, live trends and the speech model are under a collapsed **Advanced** section.
+- **Autopilot first:** in the *Find moments* sheet, Autopilot is the primary action; "Just find moments" is the secondary one.
+
 ### Autopilot, caption styles, hook teaser (v0.8)
 
 - **Autopilot:** one tap goes from a raw recording to finished clips. It finds moments, then captions and titles the best ones, then exports them, and you get a "N clips ready" notification. Start it from the *Find moments* sheet or the project card, or have it run after every import. Configure it in **Settings → Defaults & autopilot**: which tiers (S / S+A / S+A+B), up to 3/5/10 clips, captions on or off.

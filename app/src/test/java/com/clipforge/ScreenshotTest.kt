@@ -107,6 +107,20 @@ class ScreenshotTest {
 
     @Test fun settings() = shot("05_settings") { SettingsScreen(onBack = {}) }
 
+    private fun onboarding(step: Int, connected: Boolean = false, autopilot: Boolean = true, url: String = "", code: String = "", name: String = "07_onboarding_$step") = shot(name) {
+        com.clipforge.ui.onboarding.OnboardingContent(
+            step = step, connected = connected, workerUrl = url, inviteCode = code, busy = false, status = null, statusIsError = false,
+            autopilot = autopilot, importing = false, onUrl = {}, onInvite = {}, onConnect = {}, onAutopilot = {},
+            onNext = {}, onSkip = {}, onBack = {},
+        )
+    }
+
+    @Test fun onboardingWelcome() = onboarding(0)
+    @Test fun onboardingConnect() = onboarding(1)
+    @Test fun onboardingConnectFilled() = onboarding(1, url = "https://clipforge-worker.example.workers.dev", code = "secret", name = "07_onboarding_1_filled")
+    @Test fun onboardingStyle() = onboarding(2, connected = true)
+    @Test fun onboardingFirstVideo() = onboarding(3, connected = true)
+
     @Test fun assistant() = shot("06_assistant") {
         com.clipforge.ui.assistant.AssistantContent(
             com.clipforge.ui.assistant.AssistantViewModel.UiState(

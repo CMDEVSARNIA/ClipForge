@@ -103,6 +103,8 @@ class SettingsViewModel(
         viewModelScope.launch { repo.setUseTrends(v) }
     }
 
+    fun finishOnboarding() { viewModelScope.launch { repo.setOnboardingDone() } }
+
     // ---- defaults & autopilot ----
 
     fun setDefCaptionStyle(v: CaptionStyle) { _state.update { it.copy(defCaptionStyle = v) }; viewModelScope.launch { repo.setDefaults(captionStyle = v.name) } }
