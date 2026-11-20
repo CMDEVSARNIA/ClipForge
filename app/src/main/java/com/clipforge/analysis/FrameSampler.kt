@@ -11,6 +11,10 @@ import android.os.Build
 import androidx.core.graphics.scale
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.FileOutputStream
@@ -18,6 +22,39 @@ import java.io.FileOutputStream
 /**
  * Samples one frame every [CostEstimator.SAMPLE_INTERVAL_S], writes each as a 512 px-wide JPEG to
  * [outDir] and keeps only a tiny [FrameSignature] in memory. Frames already on disk from an
+ * interrupted run are reused.
+ */
+/**
+ * Which moments to grab. Targets are every [intervalS] seconds, but a keyframe within [toleranceS]
+ * of a target is taken instead: a keyframe decodes in one step, while an exact time can mean
+ * decoding dozens of frames from the previous keyframe. Labels are the real frame times.
+ */
+object SamplePlan {
+    data class Target(val timeS: Double, val keyframe: Boolean)
+
+    fun plan(durationS: Double, intervalS: Double, nearestSync: (Double) -> Double?, toleranceS: Double = 0.9): List<Target> {
+        val targets = generateSequence(0.0) { it + intervalS }.takeWhile { it < durationS - 0.1 }.toList().ifEmpty { listOf(0.0) }
+        val usedKeyframes = HashSet<Long>()
+        return targets.map { t ->
+            val k = nearestSync(t)
+            if (k != null && kotlin.math.abs(k - t) <= toleranceS && k < durationS && usedKeyframes.add(Math.round(k * 1000))) Target(k, true)
+            else Target(t, false)
+        }.sortedBy { it.timeS }.distinctBy { Math.round(it.timeS * 1000) }
+    }
+
+    /** Splits a plan into [parts] contiguous, near-equal chunks for parallel decoders. */
+    fun <T> chunks(items: List<T>, parts: Int): List<List<T>> {
+        if (items.isEmpty()) return emptyList()
+        val n = parts.coerceIn(1, items.size)
+        val size = (items.size + n - 1) / n
+        return items.chunked(size)
+    }
+}
+
+/**
+ * Samples about one frame every [CostEstimator.SAMPLE_INTERVAL_S] (see [SamplePlan]), writes each as
+ * a 512 px-wide JPEG to the output folder and keeps only a tiny [FrameSignature] in memory. Several
+ * decoders work on different parts of the video at once. Frames already on disk from an
  * interrupted run are reused.
  */
 class FrameSampler(private val context: Context) {
@@ -35,27 +72,56 @@ class FrameSampler(private val context: Context) {
         outDir.mkdirs()
         val (fw, fh) = CostEstimator.frameSize(displayW, displayH)
         val durationS = durationMs / 1000.0
-        val times = generateSequence(0.0) { it + CostEstimator.SAMPLE_INTERVAL_S }
-            .takeWhile { it < durationS - 0.1 }
-            .toList()
-            .ifEmpty { listOf(0.0) }
+        val probe = SyncProbe(context, uri)
+        val plan = try {
+            SamplePlan.plan(durationS, CostEstimator.SAMPLE_INTERVAL_S, probe::nearestSyncS)
+        } finally {
+            probe.release()
+        }
+        val done = java.util.concurrent.atomic.AtomicInteger(0)
+        val parts = SamplePlan.chunks(plan, PARALLEL_DECODERS)
+        val results = coroutineScope {
+            parts.map { part ->
+                async {
+                    try {
+                        sampleRange(uri, part, fw, fh, outDir) { onProgress(done.incrementAndGet(), plan.size) }
+                    } catch (e: kotlinx.coroutines.CancellationException) {
+                        throw e
+                    } catch (_: Exception) {
+                        // E.g. the device ran out of decoder instances: retry this part on its own.
+                        null
+                    }
+                }
+            }.awaitAll()
+        }
+        val out = ArrayList<Sample>(plan.size)
+        results.forEachIndexed { i, r ->
+            out += r ?: sampleRange(uri, parts[i], fw, fh, outDir) { onProgress(done.incrementAndGet(), plan.size) }
+        }
+        out.sortedBy { it.timeS }
+    }
 
+    private suspend fun sampleRange(
+        uri: Uri,
+        targets: List<SamplePlan.Target>,
+        fw: Int,
+        fh: Int,
+        outDir: File,
+        tick: () -> Unit,
+    ): List<Sample> {
         val retriever = MediaMetadataRetriever()
-        val syncProbe = SyncProbe(context, uri)
-        val samples = ArrayList<Sample>(times.size)
+        val samples = ArrayList<Sample>(targets.size)
         try {
             retriever.setDataSource(context, uri)
-            times.forEachIndexed { i, t ->
-                ensureActive()
-                val file = File(outDir, "f_${(t * 1000).toLong()}.jpg")
-                val sig = if (file.length() > 0) signatureFromJpeg(file) else null
-                if (sig != null) {
-                    samples += Sample(t, file, sig)
+            for (target in targets) {
+                currentCoroutineContext().ensureActive()
+                val t = target.timeS
+                val file = File(outDir, "f_${Math.round(t * 1000)}.jpg")
+                val cached = if (file.length() > 0) signatureFromJpeg(file) else null
+                if (cached != null) {
+                    samples += Sample(t, file, cached)
                 } else {
-                    // Keyframe seeks are much faster; use one when a keyframe sits right at t.
-                    val syncT = syncProbe.previousSyncS(t)
-                    val useSync = syncT != null && t - syncT <= 0.3
-                    val option = if (useSync) MediaMetadataRetriever.OPTION_CLOSEST_SYNC else MediaMetadataRetriever.OPTION_CLOSEST
+                    val option = if (target.keyframe) MediaMetadataRetriever.OPTION_CLOSEST_SYNC else MediaMetadataRetriever.OPTION_CLOSEST
                     val bmp = retriever.scaledFrame((t * 1_000_000).toLong(), option, fw, fh)
                     if (bmp != null) {
                         try {
@@ -66,13 +132,12 @@ class FrameSampler(private val context: Context) {
                         }
                     }
                 }
-                onProgress(i + 1, times.size)
+                tick()
             }
         } finally {
             runCatching { retriever.release() }
-            syncProbe.release()
         }
-        samples
+        return samples
     }
 
     private fun MediaMetadataRetriever.scaledFrame(us: Long, option: Int, w: Int, h: Int): Bitmap? = try {
@@ -90,6 +155,9 @@ class FrameSampler(private val context: Context) {
     }
 
     companion object {
+        /** Three decoders in parallel: a big win on long files, within every phone's decoder limit. */
+        const val PARALLEL_DECODERS = 3
+
         fun signatureOf(bmp: Bitmap): FrameSignature {
             val tiny = bmp.scale(FrameSignature.W, FrameSignature.H)
             val px = IntArray(FrameSignature.W * FrameSignature.H)
@@ -118,6 +186,20 @@ internal class SyncProbe(context: Context, uri: Uri) {
         }
     } catch (_: Exception) {
         null
+    }
+
+    /** The keyframe closest to [t] (before or after), from the container index alone. */
+    fun nearestSyncS(t: Double): Double? {
+        val ex = extractor ?: return null
+        fun at(mode: Int): Double? = try {
+            ex.seekTo((t * 1_000_000).toLong(), mode)
+            ex.sampleTime.takeIf { it >= 0 }?.let { it / 1_000_000.0 }
+        } catch (_: Exception) {
+            null
+        }
+        val prev = at(MediaExtractor.SEEK_TO_PREVIOUS_SYNC)
+        val next = at(MediaExtractor.SEEK_TO_NEXT_SYNC)
+        return listOfNotNull(prev, next).minByOrNull { kotlin.math.abs(it - t) }
     }
 
     fun previousSyncS(t: Double): Double? {

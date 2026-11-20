@@ -15,8 +15,8 @@ android {
         applicationId = "com.clipforge"
         minSdk = 26
         targetSdk = 36
-        versionCode = 10
-        versionName = "0.9.0"
+        versionCode = 11
+        versionName = "0.10.0"
 
         ndk {
             // 64-bit phones + emulators. Add "armeabi-v7a" for old 32-bit devices.
@@ -75,6 +75,7 @@ room {
 }
 
 dependencies {
+    implementation(project(":whisperfast"))
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)
     implementation(libs.androidx.lifecycle.runtime.compose)

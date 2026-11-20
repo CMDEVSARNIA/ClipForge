@@ -21,3 +21,4 @@ dependencyResolutionManagement {
 
 rootProject.name = "ClipForge"
 include(":app")
+include(":whisperfast")

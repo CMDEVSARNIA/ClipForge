@@ -26,7 +26,10 @@ set(GGML_BUILD_EXAMPLES OFF CACHE BOOL "" FORCE)
 
 add_subdirectory(whisper.cpp)
 
-add_library(clipforge_whisper SHARED whisper_jni.cpp whisper_core.cpp)
-target_compile_options(clipforge_whisper PRIVATE -O3 -fvisibility=hidden)
-target_link_libraries(clipforge_whisper PRIVATE whisper log android)
-target_link_options(clipforge_whisper PRIVATE -Wl,--gc-sections -Wl,--exclude-libs,ALL)
+# Library name: the app module builds the portable "clipforge_whisper"; the :whisperfast module
+# builds the same sources as "clipforge_whisper_fast" with -DGGML_CPU_ARM_ARCH=armv8.2-a+dotprod+fp16.
+set(CLIPFORGE_LIB "clipforge_whisper" CACHE STRING "Name of the JNI library")
+add_library(${CLIPFORGE_LIB} SHARED whisper_jni.cpp whisper_core.cpp)
+target_compile_options(${CLIPFORGE_LIB} PRIVATE -O3 -fvisibility=hidden)
+target_link_libraries(${CLIPFORGE_LIB} PRIVATE whisper log android)
+target_link_options(${CLIPFORGE_LIB} PRIVATE -Wl,--gc-sections -Wl,--exclude-libs,ALL)

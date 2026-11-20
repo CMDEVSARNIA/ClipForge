@@ -19,6 +19,8 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.sync.Semaphore
+import com.clipforge.util.PerfLog
+import com.clipforge.util.PerfTimer
 import kotlinx.coroutines.sync.withPermit
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonObject
@@ -52,6 +54,11 @@ class MomentAnalyzer(
     private val sampler = FrameSampler(context)
     private val refiner = CutRefiner(context)
 
+    private companion object {
+        /** Claude requests in flight at once; the Worker allows 60 per minute per install. */
+        const val BATCH_CONCURRENCY = 5
+    }
+
     private class Cost {
         @Volatile var usd = 0.0
         @Synchronized fun add(v: Double) { usd += v }
@@ -77,12 +84,14 @@ class MomentAnalyzer(
         a = a.copy(id = analyses.insert(a))
         val cost = Cost()
         val frameDir = File(context.cacheDir, "analysis/$projectId")
+        val perf = PerfTimer()
 
         try {
             // 1. Loudness
             report(Progress(0f, "Measuring loudness"))
             val db = if (info.hasAudio) audio.analyze(uri, info.durationMs) { p -> report(Progress(0.12f * p, "Measuring loudness")) } else FloatArray(0)
             val peaks = LoudnessMath.findPeaks(db)
+            perf.mark("Loudness", durationS)
 
             // 2. Frames
             val samples = sampler.sample(uri, info.durationMs, info.displayWidth, info.displayHeight, frameDir) { done, total ->
@@ -91,6 +100,7 @@ class MomentAnalyzer(
             if (samples.size < 2) throw AnalysisException("Couldn't read frames from this video.")
             val times = DoubleArray(samples.size) { samples[it].timeS }
             val coarseCuts = SceneCutDetector.detect(times, samples.map { it.sig })
+            perf.mark("Frames (${samples.size})", durationS)
 
             // 3. Game
             var game = hint
@@ -106,12 +116,13 @@ class MomentAnalyzer(
             val brief = trendBrief(game, s.useTrends)
             a = a.copy(game = game, gameDetected = detected, trendSource = brief.source.name, trendNote = brief.note, framesSampled = samples.size)
             analyses.update(a)
+            perf.mark("Game + trends")
 
             // 5. Batches
             val plan = CostEstimator.planBatches(samples.size)
             val done = AtomicInteger(0)
             val failed = AtomicInteger(0)
-            val gate = Semaphore(3)
+            val gate = Semaphore(BATCH_CONCURRENCY)
             report(Progress(0.6f, "Analyzing frames 0/${plan.size}"))
             val outcomes = coroutineScope {
                 plan.map { range ->
@@ -126,6 +137,7 @@ class MomentAnalyzer(
                     }
                 }.awaitAll()
             }
+            perf.mark("Claude batches (${plan.size})")
             if (failed.get() == plan.size) throw AnalysisException("Every analysis request failed. Check your connection and Worker logs.")
             val candidatesRaw = outcomes.filterNotNull().flatMap { it.candidates }
             val specialFrames = outcomes.filterNotNull().flatMap { it.specialFrames }.distinctBy { it.tS to it.kind }
@@ -139,6 +151,7 @@ class MomentAnalyzer(
                 val sn = ClipSnapper.snap(c.startS, c.endS, cutTimes, durationS, snapCfg)
                 c.copy(startS = sn.startS, endS = sn.endS)
             }.filter { it.lengthS >= 3.0 }
+            perf.mark("Cut refining")
 
             signals.write(
                 projectId,
@@ -163,6 +176,8 @@ class MomentAnalyzer(
                 rank(snapped, samples, db, brief, game, s.writingModel, cost)
             }
 
+            perf.mark("Ranking")
+
             // 8. Persist
             val entities = toEntities(projectId, a.id, snapped, ranking, samples, db)
                 .map { it.copy(captionStyle = s.defaultCaptionStyle, hookTeaser = s.defaultHookTeaser) }
@@ -177,6 +192,7 @@ class MomentAnalyzer(
             )
             analyses.update(a)
             frameDir.deleteRecursively()
+            PerfLog.of(context).save(perf.run("Analysis", "${samples.size} frames, ${plan.size} requests, ${failed.get()} failed"))
             report(Progress(1f, "Done"))
             return a.id
         } catch (e: CancellationException) {

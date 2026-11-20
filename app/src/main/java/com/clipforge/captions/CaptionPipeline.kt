@@ -9,6 +9,8 @@ import kotlinx.coroutines.withContext
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.serializer
 import kotlinx.serialization.json.Json
+import com.clipforge.util.PerfLog
+import com.clipforge.util.PerfTimer
 
 /**
  * Captions + titles for clips (shared by the captions job and autopilot):
@@ -28,10 +30,12 @@ class CaptionPipeline(private val context: Context) {
         val extractor = PcmExtractor(context)
         val failures = ArrayList<String>()
         var engine: WhisperEngine? = null
+        val perf = PerfTimer()
         try {
             if (project.hasAudio && !store.isReady(model)) {
                 store.ensure(model) { f -> progress(0f, "Downloading speech model ${(f * 100).toInt()}%") }
             }
+            perf.restart()
             clips.forEachIndexed { i, clip ->
                 val label = "Clip ${i + 1}/${clips.size}"
                 fun step(frac: Float, what: String) = progress((i + frac) / clips.size, "$label · $what")
@@ -44,9 +48,11 @@ class CaptionPipeline(private val context: Context) {
                         val pcm = extractor.extract16kMono(project.sourceUri.toUri(), clip.startMs, clip.endMs)
                         if (pcm != null && pcm.isNotEmpty()) {
                             step(0.2f, "transcribing")
-                            val eng = engine ?: withContext(Dispatchers.IO) { WhisperEngine.load(store.file(model)) }.also { engine = it }
+                            val eng = engine ?: withContext(Dispatchers.IO) { WhisperEngine.load(store.file(model)) }.also { engine = it; perf.mark("Load ${model.label}") }
+                            perf.restart()
                             val result = withContext(Dispatchers.Default) { eng.transcribe(pcm, settings.captionLanguage) }
                                 ?: throw IllegalStateException("Transcription failed")
+                            perf.mark("Transcribe clip ${i + 1}", pcm.size / 16000.0)
                             lang = result.lang
                             val speech = CaptionMath.filterSpeech(result.segments)
                             if (speech.isSpeech) {

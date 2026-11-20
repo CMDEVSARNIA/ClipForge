@@ -8,6 +8,13 @@ Worker so the Anthropic API key never ships inside the APK.
 
 ## What works now
 
+### Faster (v0.10)
+- **Frame sampling** jumps to the nearest keyframe when one is within 0.9 s of the 2 s grid (no decoding forward from the previous keyframe) and runs three decoders in parallel.
+- **Captions** use a second whisper.cpp build compiled for ARMv8.2 dot-product + FP16 instructions when every CPU core reports `asimddp` and `asimdhp`; other phones load the portable build. Settings → Advanced → Speech model shows which one yours uses.
+- **Analysis** sends five Claude requests at a time instead of three (the Worker now allows 60 requests/min per install).
+- **Export** was already at the hardware encoder's maximum speed (Media3 requests the highest operating rate); 30 fps in Settings → Export is the main lever there, roughly halving encode work.
+- **Settings → Advanced → Last run timings** lists how long each step of the last analysis, captions and export took, with a realtime ratio.
+
 ### Easier to use (v0.9)
 
 - **First-run onboarding:** Welcome → Connect your server (skippable) → choose **Autopilot** or **Hands-on** → import your first video. Installs that were already connected skip it.
@@ -70,7 +77,7 @@ Worker so the Anthropic API key never ships inside the APK.
 
 How the layouts render: `export/LayoutEffect.kt` is a custom Media3 `GlEffect`. The cover region is downsampled to 1/8 size and blurred with three iterations of a separable 9-tap Gaussian, darkened, then upsampled. Up to two sharp layers with anti-aliased rounded corners are composited on top (Phase 4 uses the second for the facecam). Encoding is portrait 1080×1920 when the device's H.264 encoder supports that size; otherwise 1920×1080 with a 90° rotation flag, which all major players and platforms honor.
 
-### Phase 2: moment finding & ranking: moment finding & ranking
+### Phase 2: moment finding & ranking
 
 - **Find moments** on any project. Before it runs you see the estimated API cost (frames, requests, models). Afterwards you see what it actually spent.
 - On-device signals: audio loudness (MediaCodec decoded to PCM, RMS per 0.5 s), a frame every 2 s (512 px JPEG), scene cuts (luma + color-histogram difference with an adaptive threshold), black frames.
@@ -216,7 +223,7 @@ The app never contains an Anthropic API key. It talks only to your Worker (`back
 - holds `ANTHROPIC_API_KEY` as a Worker secret and calls the Messages API with the official `@anthropic-ai/sdk`;
 - issues **per-install app tokens** (HMAC-signed) to installs that present your **invite code** once;
 - validates every request: model allowlist, `max_tokens` cap, a field allowlist, no streaming, no server tools;
-- rate-limits per install (30 requests/min) and per IP for registration (5/min), and enforces an approximate **daily budget per install** (default $2);
+- rate-limits per install (60 requests/min) and per IP for registration (5/min), and enforces an approximate **daily budget per install** (default $2);
 - adds server-side refusal fallbacks (`fallbacks: "default"`) for Sonnet/Opus 5.5 requests;
 - serves `/v1/trends?game=…`: most-viewed Shorts from the past 7 days via the YouTube Data API, cached per game per day in KV.
 

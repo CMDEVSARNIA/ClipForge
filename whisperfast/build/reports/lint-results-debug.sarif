@@ -1,0 +1,89 @@
+{
+    "$schema" : "https://docs.oasis-open.org/sarif/sarif/v2.1.0/errata01/os/schemas/sarif-schema-2.1.0.json",
+    "version" : "2.1.0",
+    "runs" : [
+        {
+            "tool": {
+                "driver": {
+                    "name": "Android Lint",
+                    "fullName": "Android Lint (in gradle)",
+                    "version": "9.5.1",
+                    "semanticVersion": "9.5.1",
+                    "organization": "Google",
+                    "informationUri": "https://developer.android.com/studio/write/lint",
+                    "fullDescription": {
+                        "text": "Static analysis originally for Android source code but now performing general analysis"
+                    },
+                    "language": "en-US",
+                    "rules": [
+                        {
+                            "id": "ChromeOsAbiSupport",
+                            "shortDescription": {
+                                "text": "Missing ABI Support for ChromeOS"
+                            },
+                            "fullDescription": {
+                                "text": "To properly support ChromeOS, your Android application should have an x86 and/or x86_64 binary as part of the build configuration. To fix the issue, ensure your files are properly optimized for ARM; the binary translator will then ensure compatibility with x86. Alternatively, add an abiSplit for x86 within your build.gradle file and create the required x86 dependencies.",
+                                "markdown": "To properly support ChromeOS, your Android application should have an x86 and/or x86_64 binary as part of the build configuration. To fix the issue, ensure your files are properly optimized for ARM; the binary translator will then ensure compatibility with x86. Alternatively, add an `abiSplit` for x86 within your `build.gradle` file and create the required x86 dependencies."
+                            },
+                            "defaultConfiguration": {
+                                "level": "warning",
+                                "rank": 70
+                            },
+                            "properties": {
+                                "tags": [
+                                    "Chrome OS",
+                                    "Correctness"
+                                ]
+                            }
+                        }
+                    ]
+                }
+            },
+            "originalUriBaseIds": {
+                "%SRCROOT%": {
+                    "uri": "file:///home/user/ClipForge/"
+                }
+            },
+            "results": [
+                {
+                    "ruleId": "ChromeOsAbiSupport",
+                    "ruleIndex": 0,
+                    "message": {
+                        "text": "Missing x86_64 ABI support for ChromeOS"
+                    },
+                    "locations": [
+                        {
+                            "physicalLocation": {
+                                "artifactLocation": {
+                                    "uriBaseId": "%SRCROOT%",
+                                    "uri": "whisperfast/build.gradle.kts"
+                                },
+                                "region": {
+                                    "startLine": 14,
+                                    "startColumn": 29,
+                                    "endLine": 14,
+                                    "endColumn": 48,
+                                    "charOffset": 430,
+                                    "charLength": 19,
+                                    "snippet": {
+                                        "text": "listOf(\"arm64-v8a\")"
+                                    }
+                                },
+                                "contextRegion": {
+                                    "startLine": 12,
+                                    "endLine": 17,
+                                    "snippet": {
+                                        "text": "    defaultConfig {\n        minSdk = 26\n        ndk { abiFilters += listOf(\"arm64-v8a\") }\n        externalNativeBuild {\n            cmake {\n"
+                                    }
+                                }
+                            }
+                        }
+                    ],
+                    "partialFingerprints": {
+                        "sourceContext/v1": "7fffa80191f81934"
+                    }
+                }
+            ]
+        }
+    ]
+}

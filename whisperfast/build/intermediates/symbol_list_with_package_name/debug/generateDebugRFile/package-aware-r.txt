@@ -1,0 +1,1 @@
+com.clipforge.whisperfast

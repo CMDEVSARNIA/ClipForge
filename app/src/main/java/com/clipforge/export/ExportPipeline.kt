@@ -4,6 +4,8 @@ import android.content.Context
 import androidx.media3.common.util.UnstableApi
 import com.clipforge.ClipForgeApp
 import kotlinx.coroutines.CancellationException
+import com.clipforge.util.PerfLog
+import com.clipforge.util.PerfTimer
 
 /** Exports clips one by one (shared by the export job and autopilot). */
 @UnstableApi
@@ -23,6 +25,7 @@ class ExportPipeline(private val context: Context) {
         val exporter = ClipExporter(context)
         val failures = ArrayList<String>()
         var exported = 0
+        val perf = PerfTimer()
         clips.forEachIndexed { i, clip ->
             val label = "Clip ${i + 1}/${clips.size}"
             progress(i.toFloat() / clips.size, label)
@@ -36,6 +39,7 @@ class ExportPipeline(private val context: Context) {
                 val r = exporter.export(project, clip, segs, i + 1, settings.exportFps, cam, watermark, teaser) { p ->
                     progress((i + p) / clips.size, "$label · ${(p * 100).toInt()}%")
                 }
+                perf.mark("Export clip ${i + 1}", segs.sumOf { it.lengthMs } / 1000.0)
                 c.database.clipDao().markExported(clip.id, r.uri.toString(), System.currentTimeMillis())
                 exported++
             } catch (e: CancellationException) {
@@ -44,6 +48,7 @@ class ExportPipeline(private val context: Context) {
                 failures += "#${clip.rank} ${clip.title}: ${e.message ?: e::class.simpleName}"
             }
         }
+        PerfLog.of(context).save(perf.run("Export", "${settings.exportFps} fps"))
         return Outcome(exported, failures)
     }
 }

@@ -33,6 +33,9 @@ class SettingsViewModel(
     private val worker: WorkerClient,
     private val models: SpeechModelStore,
     private val watermarks: WatermarkStore,
+    private val perfLog: com.clipforge.util.PerfLog,
+    /** "fast" or "compatible": which whisper build this phone's CPU gets. */
+    private val speechEngine: String,
 ) : ViewModel() {
 
     data class UiState(
@@ -68,6 +71,8 @@ class SettingsViewModel(
         val apMax: Int = 5,
         val apCaptions: Boolean = true,
         val apAfterImport: Boolean = false,
+        val perfRuns: List<com.clipforge.util.PerfRun> = emptyList(),
+        val speechEngine: String = "",
     )
 
     private val _state = MutableStateFlow(UiState())
@@ -86,12 +91,16 @@ class SettingsViewModel(
                     wmOpacity = s.watermarkOpacity, wmSize = WatermarkSize.of(s.watermarkSize), wmHasLogo = watermarks.hasLogo(),
                     defCaptionStyle = CaptionStyle.of(s.defaultCaptionStyle), defHookTeaser = s.defaultHookTeaser,
                     apMinTier = s.autopilotMinTier, apMax = s.autopilotMaxClips, apCaptions = s.autopilotCaptions, apAfterImport = s.autopilotAfterImport,
+                    perfRuns = perfLog.all(), speechEngine = speechEngine,
                 )
             }
             renderPreview()
             if (s.isConnected) refreshHealth(s.workerUrl)
         }
     }
+
+    /** Re-read timings, e.g. when Advanced is opened after a job finished. */
+    fun refreshPerf() = _state.update { it.copy(perfRuns = perfLog.all()) }
 
     fun setUrl(v: String) = _state.update { it.copy(workerUrl = v) }
     fun setInvite(v: String) = _state.update { it.copy(inviteCode = v) }
@@ -246,7 +255,10 @@ class SettingsViewModel(
         val Factory = viewModelFactory {
             initializer {
                 val app = this[APPLICATION_KEY] as ClipForgeApp
-                SettingsViewModel(app.container.settings, app.container.worker, SpeechModelStore(app), WatermarkStore(app))
+                SettingsViewModel(
+                    app.container.settings, app.container.worker, SpeechModelStore(app), WatermarkStore(app),
+                    com.clipforge.util.PerfLog.of(app), com.clipforge.captions.CpuFeatures.variantForThisDevice(),
+                )
             }
         }
     }

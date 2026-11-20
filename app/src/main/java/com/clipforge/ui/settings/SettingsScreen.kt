@@ -102,7 +102,7 @@ fun SettingsScreen(onBack: () -> Unit, vm: SettingsViewModel = viewModel(factory
 
             // Technical options, folded away by default.
             Surface(
-                onClick = { advanced = !advanced },
+                onClick = { advanced = !advanced; if (advanced) vm.refreshPerf() },
                 shape = RoundedCornerShape(16.dp),
                 color = MaterialTheme.colorScheme.surfaceContainerLow,
                 modifier = Modifier.fillMaxWidth(),
@@ -110,7 +110,7 @@ fun SettingsScreen(onBack: () -> Unit, vm: SettingsViewModel = viewModel(factory
                 Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text("Advanced", style = MaterialTheme.typography.titleMedium)
-                        Text("Models, live trends, speech model", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("Models, live trends, speech model, timings", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Text(if (advanced) "Hide" else "Show", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
                 }
@@ -119,6 +119,7 @@ fun SettingsScreen(onBack: () -> Unit, vm: SettingsViewModel = viewModel(factory
                 Section("Claude models") { ModelSettings(st, vm) }
                 Section("Live trends") { TrendSettings(st, vm) }
                 Section("Speech model") { SpeechModelSettings(st, vm) }
+                Section("Last run timings") { PerfTimings(st) }
             }
         }
     }
@@ -323,6 +324,10 @@ private fun DefaultsSettings(st: SettingsViewModel.UiState, vm: SettingsViewMode
 @Composable
 private fun SpeechModelSettings(st: SettingsViewModel.UiState, vm: SettingsViewModel) {
     Text("Captions are transcribed on your phone with whisper.cpp; audio never leaves the device. Claude only sees the text, to polish it.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+    Text(
+        if (st.speechEngine == "fast") "Engine: fast build (this CPU has dot-product and FP16 instructions)" else "Engine: compatible build",
+        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+    )
     SpeechModel.entries.forEach { m ->
         Row(verticalAlignment = Alignment.CenterVertically) {
             androidx.compose.material3.RadioButton(selected = st.speechModel == m, onClick = { vm.setSpeechModel(m) })
@@ -342,6 +347,21 @@ private fun SpeechModelSettings(st: SettingsViewModel.UiState, vm: SettingsViewM
         }
     }
     st.modelError?.let { Text(it, color = MaterialTheme.colorScheme.error, style = MaterialTheme.typography.bodySmall) }
+}
+
+@Composable
+private fun PerfTimings(st: SettingsViewModel.UiState) {
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+    if (st.perfRuns.isEmpty()) {
+        Text("Run an analysis, captions or export and how long each step took shows up here.", style = MaterialTheme.typography.bodySmall, color = muted)
+    }
+    st.perfRuns.forEach { run ->
+        Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+            Text("${run.kind} · ${com.clipforge.util.PerfFormat.seconds(run.totalMs)} total", style = MaterialTheme.typography.labelLarge)
+            run.note?.let { Text(it, style = MaterialTheme.typography.bodySmall, color = muted) }
+            run.stages.forEach { s -> Text(com.clipforge.util.PerfFormat.line(s), style = MaterialTheme.typography.bodySmall, color = muted) }
+        }
+    }
 }
 
 @Composable
