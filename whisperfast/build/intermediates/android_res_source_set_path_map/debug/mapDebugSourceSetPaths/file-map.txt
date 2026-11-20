@@ -1,9 +1,0 @@
-com.clipforge.whisperfast-pngs-0 /home/user/ClipForge/whisperfast/build/generated/res/pngs/debug
-com.clipforge.whisperfast-updated_navigation_xml-1 /home/user/ClipForge/whisperfast/build/generated/updated_navigation_xml/debug
-com.clipforge.whisperfast-mergeDebugResources-2 /home/user/ClipForge/whisperfast/build/intermediates/incremental/debug/mergeDebugResources/merged.dir
-com.clipforge.whisperfast-mergeDebugResources-3 /home/user/ClipForge/whisperfast/build/intermediates/incremental/debug/mergeDebugResources/stripped.dir
-com.clipforge.whisperfast-debug-4 /home/user/ClipForge/whisperfast/build/intermediates/merged_res/debug/mergeDebugResources
-com.clipforge.whisperfast-debug-5 /home/user/ClipForge/whisperfast/build/intermediates/packaged_res/debug/packageDebugResources
-com.clipforge.whisperfast-debug-6 /home/user/ClipForge/whisperfast/src/debug/res
-com.clipforge.whisperfast-main-7 /home/user/ClipForge/whisperfast/src/main/res
-gradleHome-0 /root/.gradle

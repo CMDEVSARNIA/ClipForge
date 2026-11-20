@@ -1,5 +1,0 @@
-#!/bin/sh
-'/opt/android-sdk/cmake/3.31.6/bin/ninja' \
-  '-C' \
-  '/home/user/ClipForge/whisperfast/.cxx/Debug/236e4j4g/arm64-v8a' \
-  'clipforge_whisper_fast'
