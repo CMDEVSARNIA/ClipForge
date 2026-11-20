@@ -65,6 +65,19 @@ jobs:
           git tag -f latest-debug
           git push -f origin latest-debug
 
+      - name: Remove older APKs from the latest-debug release
+        if: github.ref_type == 'branch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if gh release view latest-debug >/dev/null 2>&1; then
+            gh release view latest-debug --json assets -q '.assets[].name' | while read -r name; do
+              [ -n "$name" ] && gh release delete-asset latest-debug "$name" -y
+            done
+          fi
+          # A fixed file name gives one download link that always serves the newest build.
+          cp "${{ steps.apk.outputs.name }}" ClipForge-latest.apk
+
       - name: Publish latest debug build
         if: github.ref_type == 'branch'
         uses: softprops/action-gh-release@v2
@@ -77,7 +90,10 @@ jobs:
             Debug APK built from `${{ github.sha }}` on `${{ github.ref_name }}` (version ${{ steps.apk.outputs.version }}).
             Download the .apk on your phone and open it to install (allow "Install unknown apps" for your browser).
             Signed with the repo's debug key, so it updates earlier ClipForge debug installs in place.
-          files: ${{ steps.apk.outputs.name }}
+            Always-current link: https://github.com/${{ github.repository }}/releases/download/latest-debug/ClipForge-latest.apk
+          files: |
+            ${{ steps.apk.outputs.name }}
+            ClipForge-latest.apk
 
       - name: Publish tagged release
         if: github.ref_type == 'tag'

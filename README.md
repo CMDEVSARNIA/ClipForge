@@ -120,7 +120,8 @@ Main libraries: AGP 9.5, Kotlin 2.4 (AGP built-in Kotlin), Compose BOM 2026.09 /
 
 GitHub Actions builds the app on every push (`.github/workflows/android.yml`):
 
-- **Releases → "ClipForge (latest debug build)"**: the newest APK from the latest push. Open this page on your phone, tap the `.apk`, and install.
+- **Always-current download:** https://github.com/CMDEVSARNIA/ClipForge/releases/download/latest-debug/ClipForge-latest.apk (it's replaced on every push).
+- **Releases → "ClipForge (latest debug build)"**: the same APK, also under its version name.
 - **Actions → a run → Artifacts**: the same APK, zipped.
 - Pushing a tag like `v1.0.0` creates a proper release with the APK attached.
 
