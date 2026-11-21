@@ -51,7 +51,7 @@ data class AppSettings(
     }
 }
 
-class SettingsRepository(private val context: Context) {
+class SettingsRepository(private val context: Context) : com.clipforge.net.WorkerConnection {
     private object Keys {
         val workerUrl = stringPreferencesKey("worker_url")
         val appToken = stringPreferencesKey("app_token")
@@ -104,7 +104,10 @@ class SettingsRepository(private val context: Context) {
     suspend fun current(): AppSettings = settings.first()
 
     /** Random per-install id sent once at registration; lets the Worker revoke one install. */
-    suspend fun installId(): String {
+    override suspend fun endpoint(): com.clipforge.net.WorkerEndpoint? =
+        current().takeIf { it.isConnected }?.let { com.clipforge.net.WorkerEndpoint(it.workerUrl, it.appToken) }
+
+    override suspend fun installId(): String {
         context.dataStore.data.first()[Keys.installId]?.let { return it }
         val id = UUID.randomUUID().toString()
         context.dataStore.edit { it[Keys.installId] = id }

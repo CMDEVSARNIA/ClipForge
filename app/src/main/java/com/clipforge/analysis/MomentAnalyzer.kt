@@ -192,7 +192,7 @@ class MomentAnalyzer(
             )
             analyses.update(a)
             frameDir.deleteRecursively()
-            PerfLog.of(context).save(perf.run("Analysis", "${samples.size} frames, ${plan.size} requests, ${failed.get()} failed"))
+            PerfLog.inDir(context.filesDir).save(perf.run("Analysis", "${samples.size} frames, ${plan.size} requests, ${failed.get()} failed"))
             report(Progress(1f, "Done"))
             return a.id
         } catch (e: CancellationException) {

@@ -1,12 +1,18 @@
 # ClipForge
 
-Android app that turns long gameplay recordings into vertical (9:16) TikTok / YouTube Shorts clips.
+Android app (and a Windows desktop app in progress) that turns long gameplay recordings into vertical (9:16) TikTok / YouTube Shorts clips.
 Claude picks the moments and writes titles, and every Claude call goes through a small Cloudflare
 Worker so the Anthropic API key never ships inside the APK.
 
 > **Status: all 6 phases built.** See [Roadmap](#roadmap) and [Known limits](#known-limits).
 
 ## What works now
+
+### Desktop app for Windows (preview, phase 1 of 5)
+- **Shared code:** platform-free logic (Claude prompts and parsing, moment snapping, crop/caption/export math, the Worker client) now lives in the plain-Kotlin `:core` module, used by both the Android app and `:desktop`.
+- **Desktop app (`:desktop`, Compose Desktop):** import by drag-and-drop or the file picker (MP4, MKV, MOV, WebM, FLV…, up to 6 hours; files stay where they are), a library with thumbnails, a preview player with a fine-scrub timeline and keyboard shortcuts (Space, ←/→), video details, and Worker connection in Settings.
+- **FFmpeg** does the decoding: an LGPL Windows build is bundled into the installer by CI. Preview playback decodes scaled frames and 48 kHz audio in separate ffmpeg processes; video follows the audio clock.
+- **Next phases:** moment finding and the clip list → trim, framing, webcam layouts and GPU export → captions, titles, watermark, autopilot and OBS folder watch → installer polish and macOS.
 
 ### Faster (v0.10)
 - **Frame sampling** jumps to the nearest keyframe when one is within 0.9 s of the 2 s grid (no decoding forward from the previous keyframe) and runs three decoders in parallel.
@@ -131,6 +137,15 @@ GitHub Actions builds the app on every push (`.github/workflows/android.yml`):
 - **Releases → "ClipForge (latest debug build)"**: the same APK, also under its version name.
 - **Actions → a run → Artifacts**: the same APK, zipped.
 - Pushing a tag like `v1.0.0` creates a proper release with the APK attached.
+- **Windows installer (preview):** https://github.com/CMDEVSARNIA/ClipForge/releases/download/latest-debug/ClipForge-Desktop-latest.msi, built on a Windows runner a few minutes after the APK. It isn't code-signed yet, so Windows SmartScreen asks you to confirm (More info → Run anyway).
+
+### Run the desktop app from source
+
+```bash
+./gradlew :desktop:run                  # needs ffmpeg and ffprobe on PATH
+./gradlew :desktop:test                 # unit + UI tests (UI tests skip without ffmpeg)
+./gradlew :desktop:packageMsi -Pclipforge.desktopOnly=true   # on Windows; put ffmpeg.exe/ffprobe.exe in desktop/appResources/windows-x64/ffmpeg/
+```
 
 ## Build the APK
 
@@ -176,6 +191,13 @@ that reads credentials from environment variables. Never commit a release keysto
 ## Project layout
 
 ```
+core/src/main/kotlin/com/clipforge/   Shared, platform-free logic (analysis, captions, export math, Worker client)
+desktop/src/main/kotlin/com/clipforge/desktop/
+  Main.kt                  Window, navigation, drag-and-drop, file picker
+  DesktopApp.kt            Services: library, settings, Worker client, FFmpeg tools, import
+  media/                   FFmpeg lookup, ffprobe parsing, frame grabs, preview player + audio
+  data/ settings/          library.json and settings.json in %LOCALAPPDATA%\ClipForge
+  ui/                      Theme (same brand tokens), Home, Project, Settings
 app/src/main/java/com/clipforge/
   ClipForgeApp.kt          Application + manual DI container
   MainActivity.kt          Single activity, Compose host

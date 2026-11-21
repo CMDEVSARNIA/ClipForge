@@ -20,5 +20,11 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "ClipForge"
-include(":app")
-include(":whisperfast")
+include(":core")
+include(":desktop")
+// CI's Windows job builds only the desktop app: -Pclipforge.desktopOnly=true skips the Android modules
+// (no Android SDK or NDK needed there).
+if (providers.gradleProperty("clipforge.desktopOnly").orNull != "true") {
+    include(":app")
+    include(":whisperfast")
+}

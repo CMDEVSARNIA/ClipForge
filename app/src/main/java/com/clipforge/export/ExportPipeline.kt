@@ -48,7 +48,7 @@ class ExportPipeline(private val context: Context) {
                 failures += "#${clip.rank} ${clip.title}: ${e.message ?: e::class.simpleName}"
             }
         }
-        PerfLog.of(context).save(perf.run("Export", "${settings.exportFps} fps"))
+        PerfLog.inDir(context.filesDir).save(perf.run("Export", "${settings.exportFps} fps"))
         return Outcome(exported, failures)
     }
 }

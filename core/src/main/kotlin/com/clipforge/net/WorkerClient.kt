@@ -2,7 +2,6 @@ package com.clipforge.net
 
 import com.clipforge.analysis.ModelPricing
 import com.clipforge.analysis.TrendsResponse
-import com.clipforge.settings.SettingsRepository
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.suspendCancellableCoroutine
 import kotlinx.serialization.json.Json
@@ -47,11 +46,24 @@ data class ClaudeReply(
 
 data class WorkerHealth(val models: List<String>, val trends: Boolean)
 
+/** Where the Worker is and the app token it issued; null when not connected. Stored per platform. */
+data class WorkerEndpoint(val url: String, val token: String)
+
+/** Platform storage behind [WorkerClient] (DataStore on Android, a settings file on desktop). */
+interface WorkerConnection {
+    suspend fun endpoint(): WorkerEndpoint?
+    suspend fun installId(): String
+}
+
 /**
  * The app's only network client. It talks to the ClipForge Worker, never to api.anthropic.com:
  * the Worker holds the Anthropic key and forwards Messages API requests.
  */
-class WorkerClient(private val settings: SettingsRepository) {
+class WorkerClient(private val settings: WorkerConnection) {
+    private companion object {
+        const val NOT_CONNECTED = "Connect ClipForge to your Worker in Settings first."
+    }
+
     private val http = OkHttpClient.Builder()
         .connectTimeout(20, TimeUnit.SECONDS)
         .writeTimeout(120, TimeUnit.SECONDS)
@@ -88,9 +100,9 @@ class WorkerClient(private val settings: SettingsRepository) {
     }
 
     suspend fun trends(game: String): TrendsResponse {
-        val s = settings.current()
-        val url = "${s.workerUrl}/v1/trends".toHttpUrlOrNull()!!.newBuilder().addQueryParameter("game", game).build()
-        val body = execute(Request.Builder().url(url).get().header("authorization", "Bearer ${s.appToken}").build())
+        val s = settings.endpoint() ?: throw WorkerException(401, "not_connected", NOT_CONNECTED)
+        val url = "${s.url}/v1/trends".toHttpUrlOrNull()!!.newBuilder().addQueryParameter("game", game).build()
+        val body = execute(Request.Builder().url(url).get().header("authorization", "Bearer ${s.token}").build())
         return json.decodeFromString(TrendsResponse.serializer(), body)
     }
 
@@ -98,8 +110,7 @@ class WorkerClient(private val settings: SettingsRepository) {
     data class RawReply(val body: JsonObject, val costUsd: Double)
 
     suspend fun messagesRaw(request: JsonObject, maxAttempts: Int = 3): RawReply {
-        val s = settings.current()
-        if (!s.isConnected) throw WorkerException(401, "not_connected", "Connect ClipForge to your Worker in Settings first.")
+        val s = settings.endpoint() ?: throw WorkerException(401, "not_connected", NOT_CONNECTED)
         val model = (request["model"] as? JsonPrimitive)?.contentOrNull.orEmpty()
         var attempt = 0
         while (true) {
@@ -107,8 +118,8 @@ class WorkerClient(private val settings: SettingsRepository) {
             try {
                 val (body, headers) = executeWithHeaders(
                     Request.Builder()
-                        .url("${s.workerUrl}/v1/messages")
-                        .header("authorization", "Bearer ${s.appToken}")
+                        .url("${s.url}/v1/messages")
+                        .header("authorization", "Bearer ${s.token}")
                         .post(request.toString().toRequestBody(jsonType))
                         .build()
                 )
@@ -130,8 +141,7 @@ class WorkerClient(private val settings: SettingsRepository) {
 
     /** POST /v1/messages with retries on transient failures (429, 5xx, overloaded, network). */
     suspend fun messages(request: JsonObject, maxAttempts: Int = 3): ClaudeReply {
-        val s = settings.current()
-        if (!s.isConnected) throw WorkerException(401, "not_connected", "Connect ClipForge to your Worker in Settings first.")
+        val s = settings.endpoint() ?: throw WorkerException(401, "not_connected", NOT_CONNECTED)
         val model = (request["model"] as? JsonPrimitive)?.contentOrNull.orEmpty()
         var attempt = 0
         while (true) {
@@ -139,8 +149,8 @@ class WorkerClient(private val settings: SettingsRepository) {
             try {
                 val (body, headers) = executeWithHeaders(
                     Request.Builder()
-                        .url("${s.workerUrl}/v1/messages")
-                        .header("authorization", "Bearer ${s.appToken}")
+                        .url("${s.url}/v1/messages")
+                        .header("authorization", "Bearer ${s.token}")
                         .post(request.toString().toRequestBody(jsonType))
                         .build()
                 )

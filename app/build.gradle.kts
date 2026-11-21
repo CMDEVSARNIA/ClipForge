@@ -75,6 +75,7 @@ room {
 }
 
 dependencies {
+    implementation(project(":core"))
     implementation(project(":whisperfast"))
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.activity.compose)

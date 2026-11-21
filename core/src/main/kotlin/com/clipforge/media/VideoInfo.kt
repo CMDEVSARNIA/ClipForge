@@ -1,10 +1,12 @@
 package com.clipforge.media
 
+import kotlinx.serialization.Serializable
 import kotlin.math.abs
 import kotlin.math.min
 import kotlin.math.roundToInt
 
 /** Metadata for a source video. Pure data + formatting so it is unit-testable on the JVM. */
+@Serializable
 data class VideoInfo(
     val durationMs: Long,
     /** Encoded (stored) dimensions, before applying [rotationDegrees]. */

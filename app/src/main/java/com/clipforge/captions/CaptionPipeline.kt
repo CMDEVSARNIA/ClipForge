@@ -92,6 +92,7 @@ class CaptionPipeline(private val context: Context) {
             }
         } finally {
             engine?.close()
+            if (engine != null) PerfLog.inDir(context.filesDir).save(perf.run("Captions", "${model.label}, ${WhisperNative.variant} engine"))
         }
         return failures
     }

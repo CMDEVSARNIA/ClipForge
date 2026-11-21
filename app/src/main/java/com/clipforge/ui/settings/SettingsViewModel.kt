@@ -257,7 +257,7 @@ class SettingsViewModel(
                 val app = this[APPLICATION_KEY] as ClipForgeApp
                 SettingsViewModel(
                     app.container.settings, app.container.worker, SpeechModelStore(app), WatermarkStore(app),
-                    com.clipforge.util.PerfLog.of(app), com.clipforge.captions.CpuFeatures.variantForThisDevice(),
+                    com.clipforge.util.PerfLog.inDir(app.filesDir), com.clipforge.captions.CpuFeatures.variantForThisDevice(),
                 )
             }
         }

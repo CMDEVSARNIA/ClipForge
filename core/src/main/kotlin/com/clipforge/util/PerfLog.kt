@@ -67,6 +67,7 @@ class PerfLog(private val file: File) {
 
     companion object {
         private val ORDER = listOf("Analysis", "Captions", "Export")
-        fun of(context: android.content.Context) = PerfLog(File(context.filesDir, "perf.json"))
+        /** The log kept in an app's private files directory. */
+        fun inDir(dir: File) = PerfLog(File(dir, "perf.json"))
     }
 }
