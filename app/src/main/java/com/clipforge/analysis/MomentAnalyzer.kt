@@ -95,7 +95,7 @@ class MomentAnalyzer(
 
             // 2. Frames
             val samples = sampler.sample(uri, info.durationMs, info.displayWidth, info.displayHeight, frameDir) { done, total ->
-                report(Progress(0.12f + 0.43f * done / total, "Sampling frames $done/$total"))
+                report(Progress(0.12f + 0.43f * done / total, "Sampling frames $done/$total" + if (sampler.fastScan) " (fast scan)" else ""))
             }
             if (samples.size < 2) throw AnalysisException("Couldn't read frames from this video.")
             val times = DoubleArray(samples.size) { samples[it].timeS }
@@ -145,7 +145,9 @@ class MomentAnalyzer(
             // 6. Dedupe, refine cuts around candidates, snap
             report(Progress(0.89f, "Snapping to scene cuts"))
             val deduped = ClipSnapper.dedupe(candidatesRaw).sortedByDescending { it.score }.take(CostEstimator.MAX_RANKED_CANDIDATES)
-            val cutTimes = refineCuts(uri, coarseCuts, samples, deduped)
+            // Refining needs exact-time frames; on a file slow enough for fast scan, keep the coarse cuts.
+            val cutTimes = if (sampler.lastStats?.fastScan == true) coarseCuts.map { it.timeS }.sorted()
+                else refineCuts(uri, coarseCuts, samples, deduped)
             val snapCfg = ClipSnapper.Config(cutGuardS = 0.15)
             val snapped = deduped.map { c ->
                 val sn = ClipSnapper.snap(c.startS, c.endS, cutTimes, durationS, snapCfg)
@@ -192,7 +194,7 @@ class MomentAnalyzer(
             )
             analyses.update(a)
             frameDir.deleteRecursively()
-            PerfLog.inDir(context.filesDir).save(perf.run("Analysis", "${samples.size} frames, ${plan.size} requests, ${failed.get()} failed"))
+            PerfLog.inDir(context.filesDir).save(perf.run("Analysis", "${samples.size} frames, ${plan.size} requests, ${failed.get()} failed" + (sampler.lastStats?.describe()?.let { "; $it" } ?: "")))
             report(Progress(1f, "Done"))
             return a.id
         } catch (e: CancellationException) {

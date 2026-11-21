@@ -1,5 +1,6 @@
 package com.clipforge
 
+import com.clipforge.analysis.DecodeBudget
 import com.clipforge.analysis.SamplePlan
 import com.clipforge.captions.CpuFeatures
 import com.clipforge.util.PerfFormat
@@ -51,6 +52,31 @@ class SpeedTest {
         val plan = SamplePlan.plan(5.0, 2.0, { t -> t + 0.8 })
         assertTrue(plan.all { it.timeS < 5.0 })
         assertTrue(plan.all { abs(it.timeS - Math.round(it.timeS)) < 1.0 })
+    }
+
+    @Test fun planRemembersFarKeyframesForFastScan() {
+        // Keyframes every 10 s: targets at 2–8 s are exact grabs but keep the keyframe they'd fall back to.
+        val plan = SamplePlan.plan(20.0, 2.0, { t -> Math.round(t / 10) * 10.0 })
+        val t4 = plan.first { it.timeS == 4.0 }
+        assertFalse(t4.keyframe)
+        assertEquals(0.0, t4.syncS!!, 1e-9)
+        assertEquals(10.0, plan.first { it.timeS == 8.0 }.syncS!!, 1e-9)
+        assertEquals(10.0, SamplePlan.medianKeyframeGapS(plan)!!, 1e-9)
+        assertEquals(null, SamplePlan.medianKeyframeGapS(SamplePlan.plan(6.0, 2.0, { null })))
+    }
+
+    @Test fun decodeBudgetSwitchesToFastScanOnlyWhenSlow() {
+        val quick = DecodeBudget(thresholdMs = 350, minSamples = 6)
+        repeat(20) { quick.record(120) }
+        assertFalse(quick.fastScan)
+        assertEquals(120L, quick.averageMs)
+
+        val slow = DecodeBudget(thresholdMs = 350, minSamples = 6)
+        repeat(5) { slow.record(2_000) }
+        assertFalse("needs a few samples before deciding", slow.fastScan)
+        slow.record(2_000)
+        assertTrue(slow.fastScan)
+        assertEquals(6, slow.exactFrames)
     }
 
     @Test fun shortVideoStillGetsAFrame() {

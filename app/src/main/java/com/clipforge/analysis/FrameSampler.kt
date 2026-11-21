@@ -30,16 +30,26 @@ import java.io.FileOutputStream
  * decoding dozens of frames from the previous keyframe. Labels are the real frame times.
  */
 object SamplePlan {
-    data class Target(val timeS: Double, val keyframe: Boolean)
+    /** [syncS] is the nearest keyframe even when it's too far to use up front; fast-scan mode falls back to it. */
+    data class Target(val timeS: Double, val keyframe: Boolean, val syncS: Double? = null)
 
     fun plan(durationS: Double, intervalS: Double, nearestSync: (Double) -> Double?, toleranceS: Double = 0.9): List<Target> {
         val targets = generateSequence(0.0) { it + intervalS }.takeWhile { it < durationS - 0.1 }.toList().ifEmpty { listOf(0.0) }
         val usedKeyframes = HashSet<Long>()
         return targets.map { t ->
             val k = nearestSync(t)
-            if (k != null && kotlin.math.abs(k - t) <= toleranceS && k < durationS && usedKeyframes.add(Math.round(k * 1000))) Target(k, true)
-            else Target(t, false)
+            val sync = k?.takeIf { it < durationS }
+            if (sync != null && kotlin.math.abs(sync - t) <= toleranceS && usedKeyframes.add(Math.round(sync * 1000))) Target(sync, true, sync)
+            else Target(t, false, sync)
         }.sortedBy { it.timeS }.distinctBy { Math.round(it.timeS * 1000) }
+    }
+
+    /** Median spacing between the keyframes the plan saw, or null if it found fewer than two. */
+    fun medianKeyframeGapS(plan: List<Target>): Double? {
+        val ks = plan.mapNotNull { it.syncS }.distinct().sorted()
+        if (ks.size < 2) return null
+        val gaps = ks.zipWithNext { a, b -> b - a }.sorted()
+        return gaps[gaps.size / 2]
     }
 
     /** Splits a plan into [parts] contiguous, near-equal chunks for parallel decoders. */
@@ -52,6 +62,27 @@ object SamplePlan {
 }
 
 /**
+ * Watches how long exact-time frame grabs take. Once the average of the first few is over
+ * [thresholdMs] (sparse keyframes, 4K, or a codec the phone decodes in software), it switches the
+ * rest of the run to fast scan: keyframes only, which decode in one step.
+ */
+class DecodeBudget(private val thresholdMs: Long = 350, private val minSamples: Int = 6) {
+    private val count = java.util.concurrent.atomic.AtomicInteger()
+    private val totalMs = java.util.concurrent.atomic.AtomicLong()
+    @Volatile var fastScan = false
+        private set
+
+    fun record(ms: Long) {
+        val n = count.incrementAndGet()
+        val t = totalMs.addAndGet(ms)
+        if (n >= minSamples && t / n > thresholdMs) fastScan = true
+    }
+
+    val averageMs: Long get() = count.get().let { n -> if (n == 0) 0 else totalMs.get() / n }
+    val exactFrames: Int get() = count.get()
+}
+
+/**
  * Samples about one frame every [CostEstimator.SAMPLE_INTERVAL_S] (see [SamplePlan]), writes each as
  * a 512 px-wide JPEG to the output folder and keeps only a tiny [FrameSignature] in memory. Several
  * decoders work on different parts of the video at once. Frames already on disk from an
@@ -60,6 +91,24 @@ object SamplePlan {
 class FrameSampler(private val context: Context) {
 
     data class Sample(val timeS: Double, val file: File, val sig: FrameSignature)
+
+    /** What the last [sample] call did, for Settings → Advanced → Last run timings. */
+    data class Stats(val codec: String?, val keyframeGapS: Double?, val exactAvgMs: Long, val exactFrames: Int, val fastScan: Boolean) {
+        fun describe(): String = buildList {
+            codec?.let { add(it.removePrefix("video/")) }
+            keyframeGapS?.let { add(String.format(java.util.Locale.US, "keyframes every %.1f s", it)) }
+            if (exactFrames > 0) add("exact frame ${exactAvgMs} ms")
+            if (fastScan) add("fast scan")
+        }.joinToString(", ")
+    }
+
+    @Volatile var lastStats: Stats? = null
+        private set
+
+    /** True once the current run has switched to keyframes only. */
+    val fastScan: Boolean get() = budget?.fastScan == true
+
+    @Volatile private var budget: DecodeBudget? = null
 
     suspend fun sample(
         uri: Uri,
@@ -73,18 +122,22 @@ class FrameSampler(private val context: Context) {
         val (fw, fh) = CostEstimator.frameSize(displayW, displayH)
         val durationS = durationMs / 1000.0
         val probe = SyncProbe(context, uri)
+        val codec = probe.mime
         val plan = try {
             SamplePlan.plan(durationS, CostEstimator.SAMPLE_INTERVAL_S, probe::nearestSyncS)
         } finally {
             probe.release()
         }
+        val budget = DecodeBudget().also { this@FrameSampler.budget = it }
+        val takenKeyframes = java.util.concurrent.ConcurrentHashMap.newKeySet<Long>()
+        plan.filter { it.keyframe }.forEach { takenKeyframes.add(Math.round(it.timeS * 1000)) }
         val done = java.util.concurrent.atomic.AtomicInteger(0)
         val parts = SamplePlan.chunks(plan, PARALLEL_DECODERS)
         val results = coroutineScope {
             parts.map { part ->
                 async {
                     try {
-                        sampleRange(uri, part, fw, fh, outDir) { onProgress(done.incrementAndGet(), plan.size) }
+                        sampleRange(uri, part, fw, fh, outDir, budget, takenKeyframes) { onProgress(done.incrementAndGet(), plan.size) }
                     } catch (e: kotlinx.coroutines.CancellationException) {
                         throw e
                     } catch (_: Exception) {
@@ -96,9 +149,10 @@ class FrameSampler(private val context: Context) {
         }
         val out = ArrayList<Sample>(plan.size)
         results.forEachIndexed { i, r ->
-            out += r ?: sampleRange(uri, parts[i], fw, fh, outDir) { onProgress(done.incrementAndGet(), plan.size) }
+            out += r ?: sampleRange(uri, parts[i], fw, fh, outDir, budget, takenKeyframes) { onProgress(done.incrementAndGet(), plan.size) }
         }
-        out.sortedBy { it.timeS }
+        lastStats = Stats(codec, SamplePlan.medianKeyframeGapS(plan), budget.averageMs, budget.exactFrames, budget.fastScan)
+        out.sortedBy { it.timeS }.distinctBy { Math.round(it.timeS * 1000) }
     }
 
     private suspend fun sampleRange(
@@ -107,6 +161,8 @@ class FrameSampler(private val context: Context) {
         fw: Int,
         fh: Int,
         outDir: File,
+        budget: DecodeBudget,
+        takenKeyframes: MutableSet<Long>,
         tick: () -> Unit,
     ): List<Sample> {
         val retriever = MediaMetadataRetriever()
@@ -115,14 +171,23 @@ class FrameSampler(private val context: Context) {
             retriever.setDataSource(context, uri)
             for (target in targets) {
                 currentCoroutineContext().ensureActive()
-                val t = target.timeS
+                // Fast scan: swap a slow exact-time grab for its nearest keyframe (once per keyframe).
+                val useSync = !target.keyframe && budget.fastScan && target.syncS != null
+                if (useSync && !takenKeyframes.add(Math.round(target.syncS!! * 1000))) {
+                    tick()
+                    continue
+                }
+                val t = if (useSync) target.syncS!! else target.timeS
+                val keyframe = target.keyframe || useSync
                 val file = File(outDir, "f_${Math.round(t * 1000)}.jpg")
                 val cached = if (file.length() > 0) signatureFromJpeg(file) else null
                 if (cached != null) {
                     samples += Sample(t, file, cached)
                 } else {
-                    val option = if (target.keyframe) MediaMetadataRetriever.OPTION_CLOSEST_SYNC else MediaMetadataRetriever.OPTION_CLOSEST
+                    val option = if (keyframe) MediaMetadataRetriever.OPTION_CLOSEST_SYNC else MediaMetadataRetriever.OPTION_CLOSEST
+                    val started = System.nanoTime()
                     val bmp = retriever.scaledFrame((t * 1_000_000).toLong(), option, fw, fh)
+                    if (!keyframe) budget.record((System.nanoTime() - started) / 1_000_000)
                     if (bmp != null) {
                         try {
                             FileOutputStream(file).use { bmp.compress(Bitmap.CompressFormat.JPEG, 72, it) }
@@ -176,6 +241,9 @@ class FrameSampler(private val context: Context) {
 
 /** Finds the keyframe at or before a time without decoding anything. */
 internal class SyncProbe(context: Context, uri: Uri) {
+    var mime: String? = null
+        private set
+
     private val extractor: MediaExtractor? = try {
         MediaExtractor().also { ex ->
             ex.setDataSource(context, uri, null)
@@ -183,6 +251,7 @@ internal class SyncProbe(context: Context, uri: Uri) {
                 ex.getTrackFormat(it).getString(MediaFormat.KEY_MIME)?.startsWith("video/") == true
             }
             ex.selectTrack(track)
+            mime = ex.getTrackFormat(track).getString(MediaFormat.KEY_MIME)
         }
     } catch (_: Exception) {
         null

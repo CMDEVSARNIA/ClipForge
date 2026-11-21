@@ -15,6 +15,7 @@ Worker so the Anthropic API key never ships inside the APK.
 - **Next phases:** moment finding and the clip list → trim, framing, webcam layouts and GPU export → captions, titles, watermark, autopilot and OBS folder watch → installer polish and macOS.
 
 ### Faster (v0.10)
+- **Fast scan (v0.10.1):** the sampler times its exact-time frame grabs; if they average over 350 ms (sparse keyframes, 4K, or a codec the phone decodes in software) the rest of the run takes keyframes only and skips cut refining. Last run timings shows the codec, keyframe spacing and whether fast scan kicked in.
 - **Frame sampling** jumps to the nearest keyframe when one is within 0.9 s of the 2 s grid (no decoding forward from the previous keyframe) and runs three decoders in parallel.
 - **Captions** use a second whisper.cpp build compiled for ARMv8.2 dot-product + FP16 instructions when every CPU core reports `asimddp` and `asimdhp`; other phones load the portable build. Settings → Advanced → Speech model shows which one yours uses.
 - **Analysis** sends five Claude requests at a time instead of three (the Worker now allows 60 requests/min per install).
